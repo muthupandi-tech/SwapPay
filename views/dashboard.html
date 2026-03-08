@@ -883,6 +883,23 @@
                     <label for="amount">Amount (₹)</label>
                     <input type="number" id="amount" class="form-control" required min="10">
                 </div>
+                <div class="form-group" style="margin-top: -10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <input type="checkbox" id="allowPartial" checked
+                            style="width: 20px; height: 20px; accent-color: var(--accent-secondary);">
+                        <label for="allowPartial" style="margin: 0;">Allow Partial Matching (Crowd-Swap)</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <input type="checkbox" id="allowPartnerSelection"
+                            style="width: 20px; height: 20px; accent-color: var(--accent-secondary);">
+                        <label for="allowPartnerSelection" style="margin: 0;">Allow Partner Selection</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="autoAcceptPerfect" checked
+                            style="width: 20px; height: 20px; accent-color: var(--accent-secondary);">
+                        <label for="autoAcceptPerfect" style="margin: 0;">Auto-Accept Perfect Match</label>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label for="location">Meeting Location</label>
                     <input type="text" id="location" class="form-control" required placeholder="e.g. Library, Canteen">
@@ -916,6 +933,31 @@
                 </div>
                 <button type="submit" id="submitRatingBtn" class="btn-submit">Submit Rating</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Partner Selection Modal -->
+    <div class="modal-overlay" id="partnerSelectionModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Select <span>Partners</span></h2>
+                <button class="btn-close" onclick="closePartnerSelectionModal()">&times;</button>
+            </div>
+
+            <div id="partnerSummarySticky"
+                style="background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="font-weight: bold; color: #2ecc71; text-align: center;" id="partnerSelectionMath">
+                    ₹0 Requested — ₹0 Selected — ₹0 Remaining
+                </div>
+            </div>
+
+            <div id="availablePartnersList"
+                style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                <!-- Partners inserted dynamically -->
+            </div>
+
+            <button type="button" id="confirmPartnersBtn" class="btn-submit" onclick="confirmSelection()">Confirm
+                Swap</button>
         </div>
     </div>
 
@@ -1008,7 +1050,10 @@
             const payload = {
                 type: swapTypeInput.value,
                 amount: document.getElementById('amount').value,
-                location: document.getElementById('location').value
+                location: document.getElementById('location').value,
+                allow_partial_match: document.getElementById('allowPartial').checked,
+                allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
+                auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked
             };
 
             try {
@@ -1196,7 +1241,14 @@
             if (isMyContext) {
                 // My Swap Context
                 if (swap.status === 'open') {
-                    actionArea = `<div class="status-text warning" style="color: var(--text-secondary); background: none;">Waiting for peer</div>`;
+                    if (swap.allow_partner_selection) {
+                        actionArea = `
+                            <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Partner Selection Enabled</div>
+                            <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount})" style="margin-top: 1rem;">View Available Partners</button>
+                        `;
+                    } else {
+                        actionArea = `<div class="status-text warning" style="color: var(--text-secondary); background: none;">Waiting for peer</div>`;
+                    }
                 } else if (swap.status === 'matched') {
                     let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
 
@@ -1257,8 +1309,29 @@
 
                 const swaps = await response.json();
 
+                // Grouping Logic for Crowd-Swap
+                const parents = {};
+                const children = [];
+
+                swaps.forEach(swap => {
+                    if (!swap.parent_swap_id) {
+                        parents[swap.id] = { ...swap, childChunks: [] };
+                    } else {
+                        children.push(swap);
+                    }
+                });
+
+                children.forEach(child => {
+                    let myParentId = child.isCreator ? child.parent_swap_id : child.matched_parent_swap_id;
+                    if (parents[myParentId]) {
+                        parents[myParentId].childChunks.push(child);
+                    }
+                });
+
+                const groupedSwaps = Object.values(parents);
+
                 // Filter based on tab
-                const filteredSwaps = swaps.filter(swap => {
+                const filteredSwaps = groupedSwaps.filter(swap => {
                     if (currentTab === 'active') return swap.status === 'open';
                     if (currentTab === 'matched') return swap.status === 'matched';
                     if (currentTab === 'completed') return swap.status === 'completed';
@@ -1272,8 +1345,40 @@
                     return;
                 }
 
-                filteredSwaps.forEach(swap => {
-                    container.innerHTML += createSwapCardHTML(swap, true);
+                filteredSwaps.forEach(parentSwap => {
+                    if (parentSwap.childChunks && parentSwap.childChunks.length > 0) {
+                        const total = parseFloat(parentSwap.total_amount) || parseFloat(parentSwap.amount);
+                        const remaining = parseFloat(parentSwap.remaining_amount) || 0;
+                        const matched = total - remaining;
+                        const progressPercent = Math.round((matched / total) * 100);
+
+                        let chunksHtml = parentSwap.childChunks.map(child => createSwapCardHTML(child, true)).join('');
+
+                        container.innerHTML += `
+                            <div class="swap-card" style="grid-column: 1 / -1; border-color: var(--accent-secondary); gap: 0;">
+                                <div class="swap-card-header" style="margin-bottom: 1rem;">
+                                    <div>
+                                        <h3 style="margin-bottom: 0.2rem;">Crowd-Swap Container</h3>
+                                        <span class="swap-type-badge need-cash" style="background: rgba(232, 67, 147, 0.1); color: var(--accent-secondary);">₹${matched} Matched — ₹${remaining} Remaining</span>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary)">₹${total}</div>
+                                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Requested</div>
+                                    </div>
+                                </div>
+                                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 1.5rem;">
+                                    <div style="width: ${progressPercent}%; height: 100%; background: var(--accent-secondary);"></div>
+                                </div>
+                                
+                                <h4 style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Matched Contributors (${parentSwap.childChunks.length})</h4>
+                                <div class="swaps-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                                    ${chunksHtml}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML += createSwapCardHTML(parentSwap, true);
+                    }
                 });
             } catch (err) {
                 console.error(err);
@@ -1305,6 +1410,135 @@
                 container.innerHTML = '<p style="color: #ff6b6b;">Failed to load swaps. Please refresh.</p>';
             }
         }
+
+        // Partner Selection Logic
+        let activeSelectionSwapId = null;
+        let activeSelectionRequestedAmount = 0;
+        let activeCandidatePartners = [];
+
+        window.openPartnerSelection = async function (swapId, requestedAmount) {
+            activeSelectionSwapId = swapId;
+            activeSelectionRequestedAmount = parseFloat(requestedAmount);
+
+            const listContainer = document.getElementById('availablePartnersList');
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Loading partners...</p>';
+
+            document.getElementById('partnerSelectionModal').classList.add('active');
+            updateSelectionMath();
+
+            try {
+                const response = await fetch(`/api/swaps/availablePartners/${swapId}`);
+                if (!response.ok) throw new Error('Failed to fetch partners');
+                activeCandidatePartners = await response.json();
+
+                if (activeCandidatePartners.length === 0) {
+                    listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No partners available right now. Check back later!</p>';
+                    return;
+                }
+
+                listContainer.innerHTML = activeCandidatePartners.map(p => {
+                    const ratingStr = p.partner_rating ? `⭐${parseFloat(p.partner_rating).toFixed(1)}` : 'New';
+                    return `
+                        <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 5px 0; color: var(--text-primary);">${p.partner_name} <span style="font-size: 0.8rem; color: var(--accent-secondary); margin-left: 5px;">${ratingStr}</span></h4>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                                    <span>Offers: <strong style="color: var(--accent-primary);">₹${p.amount}</strong></span>
+                                    <span style="margin-left: 10px;">📍 ${p.location}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <input type="checkbox" class="partner-checkbox" data-id="${p.id}" data-amount="${p.amount}" onchange="updateSelectionMath()" style="width: 20px; height: 20px; accent-color: var(--accent-primary); cursor: pointer;">
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error(err);
+                listContainer.innerHTML = '<p style="color: #ff6b6b; text-align: center;">Failed to load partners.</p>';
+            }
+        };
+
+        window.closePartnerSelectionModal = function () {
+            document.getElementById('partnerSelectionModal').classList.remove('active');
+            activeSelectionSwapId = null;
+            activeCandidatePartners = [];
+        };
+
+        window.updateSelectionMath = function () {
+            let selectedSum = 0;
+            const checkboxes = document.querySelectorAll('.partner-checkbox:checked');
+
+            checkboxes.forEach(cb => {
+                selectedSum += parseFloat(cb.getAttribute('data-amount'));
+            });
+
+            let remaining = activeSelectionRequestedAmount - selectedSum;
+
+            const btn = document.getElementById('confirmPartnersBtn');
+            const mathDisplay = document.getElementById('partnerSelectionMath');
+
+            if (remaining < 0) {
+                mathDisplay.innerHTML = `⚠️ Over-selected by ₹${Math.abs(remaining).toFixed(2)}!`;
+                mathDisplay.style.color = '#ff6b6b';
+                mathDisplay.parentElement.style.borderColor = '#ff6b6b';
+                mathDisplay.parentElement.style.background = 'rgba(255, 107, 107, 0.1)';
+                btn.disabled = true;
+                btn.innerText = 'Cannot Exceed Request Amount';
+                btn.style.opacity = '0.5';
+            } else {
+                mathDisplay.innerHTML = `₹${activeSelectionRequestedAmount} Requested — <strong>₹${selectedSum} Selected</strong> — ₹${remaining} Remaining`;
+                mathDisplay.style.color = '#2ecc71';
+                mathDisplay.parentElement.style.borderColor = '#2ecc71';
+                mathDisplay.parentElement.style.background = 'rgba(46, 204, 113, 0.1)';
+                btn.disabled = selectedSum === 0;
+                btn.innerText = 'Confirm Swap';
+                btn.style.opacity = selectedSum > 0 ? '1' : '0.5';
+            }
+
+            return { selectedSum, remaining };
+        };
+
+        window.confirmSelection = async function () {
+            const checkboxes = document.querySelectorAll('.partner-checkbox:checked');
+            if (checkboxes.length === 0) return;
+
+            const selectedPartners = Array.from(checkboxes).map(cb => ({
+                id: cb.getAttribute('data-id'),
+                amount: cb.getAttribute('data-amount')
+            }));
+
+            const btn = document.getElementById('confirmPartnersBtn');
+            btn.disabled = true;
+            btn.innerText = 'Locking Partners...';
+
+            try {
+                const response = await fetch('/api/swaps/confirmPartners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        swapId: activeSelectionSwapId,
+                        selectedPartners: selectedPartners
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Partners locked successfully!', '✅');
+                    closePartnerSelectionModal();
+                    loadAllData();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to lock partners.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Confirm Swap';
+            }
+        };
 
 
         // Complete Swap

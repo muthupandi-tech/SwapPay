@@ -29,4 +29,8 @@ router.get('/mySwaps', swapController.getMySwaps);
 router.get('/notifications', swapController.getNotifications);
 router.post('/notifications/read/:id', swapController.markNotificationRead);
 
+// Partner Selection
+router.get('/availablePartners/:id', swapController.getAvailablePartners);
+router.post('/confirmPartners', swapController.confirmPartnerSelection);
+
 module.exports = router;

@@ -32,111 +32,221 @@ exports.createSwap = async (req, res) => {
     }
 
     try {
-        // --- AUTO-MATCHING LOGIC ---
+        const isPartialAllowed = req.body.allow_partial_match === true || req.body.allow_partial_match === 'true';
+        const isPartnerSelection = req.body.allow_partner_selection === true || req.body.allow_partner_selection === 'true';
+        const isAutoAcceptPerfect = req.body.auto_accept_perfect !== false && req.body.auto_accept_perfect !== 'false';
+        const parsedAmount = parseFloat(amount);
+
+        // 1. Insert the PARENT swap request initially
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
+        const newParentSwapId = result.insertId;
+
         const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
+        let remainingNeeded = parsedAmount;
+        let matchedChunks = [];
+        let autoMatchProceed = !isPartnerSelection; // If false, we branch into candidate selection mapping
 
-        // Find an open swap with the EXACT same amount and opposite type from a DIFFERENT user
-        const findMatchQuery = `
-            SELECT * FROM swaps 
-            WHERE status = 'open' 
-              AND amount = ? 
-              AND type = ? 
-              AND user_id != ? 
-            ORDER BY created_at ASC 
-            LIMIT 1
-        `;
-        const [matchRows] = await promisePool.execute(findMatchQuery, [amount, oppositeType, userId]);
+        // --- PARTNER SELECTION LOGIC ---
+        if (isPartnerSelection) {
+            let candidateQuery = `
+                SELECT s.*, u.name as partner_name, u.email as partner_email,
+                (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as partner_rating
+                FROM swaps s 
+                JOIN users u ON s.user_id = u.id
+                WHERE s.status = 'open' 
+                  AND s.type = ? 
+                  AND s.user_id != ? 
+                  AND s.remaining_amount > 0
+            `;
+            let queryParams = [oppositeType, userId];
 
-        if (matchRows.length > 0) {
-            // A PERFECT MATCH FOUND! 
-            const matchedSwap = matchRows[0];
-            const originalUserId = matchedSwap.user_id;
-            const swapId = matchedSwap.id;
+            if (!isPartialAllowed) {
+                candidateQuery += ` AND s.remaining_amount >= ? AND (s.allow_partial_match = TRUE OR s.remaining_amount = ?) `;
+                queryParams.push(remainingNeeded, remainingNeeded);
+            } else {
+                candidateQuery += ` AND (s.allow_partial_match = TRUE OR s.remaining_amount <= ?) `;
+                queryParams.push(remainingNeeded);
+            }
 
-            // 1. Update the existing swap to 'matched' instantly
-            const updateQuery = 'UPDATE swaps SET status = ?, matched_user_id = ?, match_time = NOW() WHERE id = ?';
-            await promisePool.execute(updateQuery, ['matched', userId, swapId]);
+            candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = ? THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
+            queryParams.push(remainingNeeded);
 
-            // 2. Add Notifications
-            const msg = `Perfect Match Found! Your swap request has been matched! Please proceed to the meeting location.`;
-            const title = 'Swap Matched';
-            const alertType = 'match';
+            const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
 
-            // Notify original user
-            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [originalUserId, title, msg, alertType]);
-            // Notify current user
-            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, title, msg, alertType]);
+            if (matchRows.length > 0) {
+                let perfectMatchIndex = matchRows.findIndex(r => parseFloat(r.remaining_amount) === remainingNeeded);
 
-            // 3. Emit Socket Events to BOTH users immediately
-            if (global.io) {
-                global.io.to(`user_${originalUserId}`).emit('notification', { title, message: msg, type: alertType, created_at: new Date() });
-                global.io.to(`user_${userId}`).emit('notification', { title, message: msg, type: alertType, created_at: new Date() });
+                if (isAutoAcceptPerfect && perfectMatchIndex !== -1) {
+                    // Force the while loop to perform the standard auto-match mechanism
+                    autoMatchProceed = true;
+                } else {
+                    // Do not auto-match. Just email the user the options and leave swap marked open.
+                    let emailPartners = matchRows.map(r => ({
+                        name: r.partner_name,
+                        amount: r.remaining_amount,
+                        rating: r.partner_rating,
+                        location: r.location
+                    }));
 
-                global.io.emit('admin_activity', {
-                    event: 'Instant Auto-Match',
-                    swapId,
-                    details: `Swap #${swapId} was instantly auto-matched between users ${originalUserId} and ${userId}.`
+                    const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+                    if (userRows.length > 0) {
+                        const { sendMultiplePartnersAvailableEmail } = require('../utils/emailService');
+                        await sendMultiplePartnersAvailableEmail(userRows[0].email, parsedAmount, emailPartners);
+                    }
+
+                    return res.status(201).json({
+                        message: 'Swap request created. Multiple partners available for selection!',
+                        swapId: newParentSwapId,
+                        isAutoMatched: false,
+                        hasCandidates: true
+                    });
+                }
+            }
+        }
+
+        // --- AUTO-MATCHING CROWD-SWAP LOGIC ---
+        if (autoMatchProceed) {
+            while (remainingNeeded > 0) {
+                // Find an opposite open swap.
+                // If our swap allows partial, we can match any other partial-allowed swap, OR fully absorb a non-partial swap.
+                // If our swap DOES NOT allow partial, we can only match if the other swap's remaining amount exactly equals what we need OR is greater (if they allow partial).
+                let candidateQuery = `
+                    SELECT * FROM swaps 
+                    WHERE status = 'open' 
+                      AND type = ? 
+                      AND user_id != ? 
+                      AND remaining_amount > 0
+                `;
+                let queryParams = [oppositeType, userId];
+
+                if (!isPartialAllowed) {
+                    candidateQuery += ` AND remaining_amount >= ? `;
+                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount = ?) `;
+                    queryParams.push(remainingNeeded, remainingNeeded);
+                } else {
+                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount <= ?) `;
+                    queryParams.push(remainingNeeded);
+                }
+
+                candidateQuery += ` ORDER BY created_at ASC LIMIT 1`;
+
+                const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
+
+                if (matchRows.length === 0) {
+                    break; // No more suitable matches found
+                }
+
+                const candidate = matchRows[0];
+                const candidateRemaining = parseFloat(candidate.remaining_amount);
+
+                // Calculate how much we can swap
+                let chunkAmount = Math.min(remainingNeeded, candidateRemaining);
+
+                // Update Candidate Parent Swap
+                const newCandidateRemaining = candidateRemaining - chunkAmount;
+                const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'open';
+
+                await promisePool.execute(
+                    'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
+                    [newCandidateRemaining, candidateStatus, candidateStatus, candidate.id]
+                );
+
+                // Create CHILD SWAP representing the exact match chunk
+                const [childResult] = await promisePool.execute(`
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+                `, [
+                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id
+                ]);
+
+                matchedChunks.push({
+                    partnerId: candidate.user_id,
+                    chunkAmount: chunkAmount,
+                    childSwapId: childResult.insertId,
+                    candidateParentId: candidate.id,
+                    remainingNeededAfter: remainingNeeded - chunkAmount
+                });
+
+                remainingNeeded -= chunkAmount;
+
+                if (!isPartialAllowed && remainingNeeded <= 0) {
+                    break;
+                }
+            }
+
+            // Update Our Parent Swap based on what was matched
+            const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'open';
+            await promisePool.execute(
+                'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
+                [remainingNeeded, finalParentStatus, finalParentStatus, newParentSwapId]
+            );
+
+            // --- Post-Match Notifications & Emails ---
+            // We will process all chunks matched
+            if (matchedChunks.length > 0) {
+                const { sendPartialMatchEmail } = require('../utils/emailService');
+
+                for (const chunk of matchedChunks) {
+                    const partnerId = chunk.partnerId;
+                    const chunkAmt = chunk.chunkAmount;
+
+                    // Notifications
+                    const msg = `Match Found! ₹${chunkAmt} of your request has been matched with a partner!`;
+                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partial Match', msg, 'match']);
+                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [partnerId, 'Partial Match', msg, 'match']);
+
+                    if (global.io) {
+                        global.io.to(`user_${userId}`).emit('notification', { title: 'Partial Match', message: msg, type: 'match', created_at: new Date() });
+                        global.io.to(`user_${partnerId}`).emit('notification', { title: 'Partial Match', message: msg, type: 'match', created_at: new Date() });
+                        global.io.emit('admin_activity', { event: 'Crowd-Swap Match', swapId: chunk.childSwapId, details: `Child Swap #${chunk.childSwapId} created for ₹${chunkAmt}.` });
+                    }
+
+                    // Emails
+                    (async () => {
+                        try {
+                            const [meRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                            const [partnerRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [partnerId]);
+
+                            if (meRows.length > 0 && partnerRows.length > 0) {
+                                const me = meRows[0];
+                                const partner = partnerRows[0];
+
+                                // Our remaining is remainingNeededAfter
+                                await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, type === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
+
+                                // Partner remaining needs to pull from DB, but we know it's CandidateParent's remaining
+                                const [pRow] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                                const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
+                                await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
+                            }
+                        } catch (err) {
+                            console.error('Error sending partial match emails', err);
+                        }
+                    })();
+                }
+
+                return res.status(201).json({
+                    message: remainingNeeded <= 0 ? 'Request fully matched via Crowd-Swap!' : `Request partially matched! ₹${remainingNeeded} remaining.`,
+                    swapId: newParentSwapId,
+                    isAutoMatched: true,
+                    chunks: matchedChunks.length
                 });
             }
-
-            // 4. Send Instant Dual-Emails
-            (async () => {
-                try {
-                    const [creatorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [originalUserId]);
-                    const [acceptorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-
-                    if (creatorRows.length > 0 && acceptorRows.length > 0) {
-                        const creator = creatorRows[0];
-                        const acceptor = acceptorRows[0];
-                        const { sendSwapMatchedEmail } = require('../utils/emailService');
-
-                        // Send to the Original Creator
-                        await sendSwapMatchedEmail(
-                            creator.email,
-                            creator.name,
-                            acceptor.name,
-                            acceptor.email,
-                            matchedSwap.type === 'need_cash' ? 'Need Cash' : 'Need UPI',
-                            amount,
-                            matchedSwap.location // Use existing location for meetup
-                        );
-
-                        // Send to the Current User
-                        await sendSwapMatchedEmail(
-                            acceptor.email,
-                            acceptor.name,
-                            creator.name,
-                            creator.email,
-                            matchedSwap.type === 'need_cash' ? 'Need UPI' : 'Need Cash',
-                            amount,
-                            matchedSwap.location // Use existing location for meetup
-                        );
-                    }
-                } catch (e) {
-                    console.error('Error in instant auto-match email block:', e);
-                }
-            })();
-
-            return res.status(200).json({ message: 'Perfect match found! Request instantly auto-matched.', swapId: swapId, isAutoMatched: true });
-
-        } else {
-            // --- NO MATCH FOUND: CREATE NEW OPEN SWAP ---
-            const query = 'INSERT INTO swaps (user_id, type, amount, location, status) VALUES (?, ?, ?, ?, ?)';
-            const [result] = await promisePool.execute(query, [userId, type, amount, location, 'open']);
-
-            // Send standard 'Swap Created' Email Notification
-            try {
-                const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
-                if (userRows.length > 0) {
-                    const { sendSwapCreatedEmail } = require('../utils/emailService');
-                    await sendSwapCreatedEmail(userRows[0].email, type, amount, location);
-                }
-            } catch (e) {
-                console.error('Error sending create swap email', e);
-            }
-
-            return res.status(201).json({ message: 'Swap request created and waiting for a match.', swapId: result.insertId, isAutoMatched: false });
         }
+
+        // If no matches at all (or autoMatchProceed is false and no candidates found)
+        try {
+            const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+            if (userRows.length > 0) {
+                const { sendSwapCreatedEmail } = require('../utils/emailService');
+                await sendSwapCreatedEmail(userRows[0].email, type, parsedAmount, location);
+            }
+        } catch (e) {
+            console.error('Error sending create swap email', e);
+        }
+
+        return res.status(201).json({ message: 'Swap request created. Waiting for matches.', swapId: newParentSwapId, isAutoMatched: false });
 
     } catch (error) {
         console.error('Error creating/matching swap:', error);
@@ -338,8 +448,8 @@ exports.getMySwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.type, s.amount, s.location, s.status, s.created_at, s.user_id, s.matched_user_id,
-            s.creator_completed, s.acceptor_completed,
+            SELECT s.id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.created_at, s.user_id, s.matched_user_id,
+            s.creator_completed, s.acceptor_completed, s.parent_swap_id, s.matched_parent_swap_id,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -483,5 +593,181 @@ exports.markNotificationRead = async (req, res) => {
     } catch (error) {
         console.error('Error marking notification read:', error);
         res.status(500).json({ error: 'Failed to update notification.' });
+    }
+};
+
+// Fetch available partners for a specific open swap
+exports.getAvailablePartners = async (req, res) => {
+    const userId = req.session.userId;
+    const swapId = req.params.id;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
+
+    try {
+        const [swapRows] = await promisePool.execute('SELECT type, remaining_amount, allow_partial_match, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
+        if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
+
+        const mySwap = swapRows[0];
+        if (mySwap.status !== 'open') return res.status(400).json({ error: 'Swap is no longer open.' });
+
+        const oppositeType = mySwap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+        let remainingNeeded = parseFloat(mySwap.remaining_amount);
+
+        let candidateQuery = `
+            SELECT s.*, u.name as partner_name, u.email as partner_email,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as partner_rating
+            FROM swaps s 
+            JOIN users u ON s.user_id = u.id
+            WHERE s.status = 'open' 
+              AND s.type = ? 
+              AND s.user_id != ? 
+              AND s.remaining_amount > 0
+        `;
+        let queryParams = [oppositeType, userId];
+
+        if (!mySwap.allow_partial_match) {
+            candidateQuery += ` AND s.remaining_amount >= ? AND (s.allow_partial_match = TRUE OR s.remaining_amount = ?) `;
+            queryParams.push(remainingNeeded, remainingNeeded);
+        } else {
+            candidateQuery += ` AND (s.allow_partial_match = TRUE OR s.remaining_amount <= ?) `;
+            queryParams.push(remainingNeeded);
+        }
+
+        candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = ? THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
+        queryParams.push(remainingNeeded);
+
+        const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
+
+        const candidates = matchRows.map(r => ({
+            id: r.id,
+            partner_name: r.partner_name,
+            partner_rating: r.partner_rating,
+            location: r.location,
+            amount: parseFloat(r.remaining_amount)
+        }));
+
+        res.status(200).json(candidates);
+    } catch (error) {
+        console.error('Error fetching available partners:', error);
+        res.status(500).json({ error: 'Failed to fetch partners.' });
+    }
+};
+
+// Confirm selected partners and lock them
+exports.confirmPartnerSelection = async (req, res) => {
+    const userId = req.session.userId;
+    const { swapId, selectedPartners } = req.body;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
+    if (!selectedPartners || !Array.isArray(selectedPartners) || selectedPartners.length === 0) {
+        return res.status(400).json({ error: 'No partners selected.' });
+    }
+
+    try {
+        const [swapRows] = await promisePool.execute('SELECT type, remaining_amount, location, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
+        if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
+
+        const mySwap = swapRows[0];
+        if (mySwap.status !== 'open') return res.status(400).json({ error: 'Swap is no longer open.' });
+
+        let remainingNeeded = parseFloat(mySwap.remaining_amount);
+        let selectionGroupId = 'GRP-' + Date.now();
+        let matchedChunks = [];
+
+        for (let i = 0; i < selectedPartners.length; i++) {
+            const partner = selectedPartners[i];
+            const candidateId = partner.id;
+            const requestedChunk = parseFloat(partner.amount);
+
+            if (remainingNeeded <= 0) break; // Safety net
+
+            const [pRows] = await promisePool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "open"', [candidateId]);
+            if (pRows.length === 0) continue; // Partner was taken
+
+            const candidateSwap = pRows[0];
+            const candidateRemaining = parseFloat(candidateSwap.remaining_amount);
+
+            let actualChunk = Math.min(requestedChunk, candidateRemaining, remainingNeeded);
+            if (actualChunk <= 0) continue;
+
+            const newCandidateRemaining = candidateRemaining - actualChunk;
+            const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'open';
+
+            await promisePool.execute(
+                'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time), is_selected = TRUE, selection_group_id = ?, partner_priority_rank = ? WHERE id = ?',
+                [newCandidateRemaining, candidateStatus, candidateStatus, selectionGroupId, i + 1, candidateId]
+            );
+
+            const [childResult] = await promisePool.execute(`
+                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+            `, [
+                userId, mySwap.type, actualChunk, actualChunk, 0, mySwap.location, 'matched', candidateSwap.user_id, swapId, candidateId
+            ]);
+
+            matchedChunks.push({
+                partnerId: candidateSwap.user_id,
+                chunkAmount: actualChunk,
+                childSwapId: childResult.insertId,
+                candidateParentId: candidateId,
+                remainingNeededAfter: remainingNeeded - actualChunk
+            });
+
+            remainingNeeded -= actualChunk;
+        }
+
+        const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'open';
+        await promisePool.execute(
+            'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
+            [remainingNeeded, finalParentStatus, finalParentStatus, swapId]
+        );
+
+        if (matchedChunks.length > 0) {
+            const { sendPartialMatchEmail } = require('../utils/emailService');
+            for (const chunk of matchedChunks) {
+                const pId = chunk.partnerId;
+                const chunkAmt = chunk.chunkAmount;
+
+                const msg = `Match Confirmed! ₹${chunkAmt} of a swap request has been locked with you!`;
+                await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partner Selected', msg, 'match']);
+                await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [pId, 'Partner Selected', msg, 'match']);
+
+                if (global.io) {
+                    global.io.to(`user_${userId}`).emit('notification', { title: 'Partner Selected', message: msg, type: 'match', created_at: new Date() });
+                    global.io.to(`user_${pId}`).emit('notification', { title: 'Partner Selected', message: msg, type: 'match', created_at: new Date() });
+                }
+
+                (async () => {
+                    try {
+                        const [meRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                        const [partnerRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [pId]);
+
+                        if (meRows.length > 0 && partnerRows.length > 0) {
+                            const me = meRows[0];
+                            const partner = partnerRows[0];
+                            const oppositeType = mySwap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+
+                            await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, mySwap.type === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
+
+                            const [pRow] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                            const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
+                            await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
+                        }
+                    } catch (err) {
+                        console.error('Error sending confirming emails', err);
+                    }
+                })();
+            }
+        }
+
+        res.status(200).json({
+            message: 'Partners successfully confirmed and locked.',
+            lockedChunks: matchedChunks.length,
+            remainingNeeded: remainingNeeded
+        });
+
+    } catch (error) {
+        console.error('Error confirming partners:', error);
+        res.status(500).json({ error: 'Failed to confirm partners.' });
     }
 };

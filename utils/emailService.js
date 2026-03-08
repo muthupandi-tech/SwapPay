@@ -178,6 +178,55 @@ async function sendSwapMatchedEmail(toEmail, partnerName, partnerEmail, swapType
 }
 
 /**
+ * Partial Swap Match Email Template
+ */
+async function sendPartialMatchEmail(toEmail, chunkAmt, remainingAmt, partnerName, partnerType, location) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const remainingText = remainingAmt > 0
+        ? `<p style="color: #ea580c; font-weight: bold;">You still need ₹${remainingAmt} to fully complete your request. We will keep looking for more partners!</p>`
+        : `<p style="color: #16a34a; font-weight: bold;">Your request is now fully matched! No remaining amount.</p>`;
+
+    const content = `
+        <p>Great news! A partial match of <strong>₹${chunkAmt}</strong> has been secured for your SwapPay request.</p>
+        
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Match Details:</strong></p>
+            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                <li><strong>Partner:</strong> ${partnerName}</li>
+                <li><strong>Amount Matched:</strong> ₹${chunkAmt}</li>
+                <li><strong>They Need:</strong> ${partnerType}</li>
+                <li><strong>Meetup Location:</strong> ${location}</li>
+            </ul>
+        </div>
+        
+        ${remainingText}
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="http://localhost:3000/dashboard" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Progress</a>
+        </div>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Notifications" <${senderEmail}>`,
+        to: toEmail,
+        subject: `🔄 Partial Match Found: ₹${chunkAmt}`,
+        html: getEmailTemplateWrapper("Partial Match", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Partial Match Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send email to ${toEmail}:`, error);
+    }
+}
+
+/**
  * 2. Swap Completed Email Template
  */
 async function sendSwapCompletedEmail(toEmail, partnerName, amount) {
@@ -222,11 +271,11 @@ async function sendRatingReceivedEmail(toEmail, stars, newTrustScore) {
     const starDisplay = '⭐'.repeat(stars) + '☆'.repeat(5 - stars);
 
     const content = `
-        < p > You've received a new rating from a recent swap partner!</p>
-            < div style = "text-align: center; margin: 30px 0; padding: 20px; background-color: #f8fafc; border-radius: 8px;" >
+        <p>You've received a new rating from a recent swap partner!</p>
+        <div style="text-align: center; margin: 30px 0; padding: 20px; background-color: #f8fafc; border-radius: 8px;">
             <div style="font-size: 32px; letter-spacing: 5px; margin-bottom: 10px;">${starDisplay}</div>
             <p style="margin: 0; color: #475569; font-size: 18px;"><strong>${stars} / 5 Stars</strong></p>
-        </div >
+        </div>
         <p>Your new calculated Trust Score is <strong>${newTrustScore}%</strong>.</p>
         <p>Thank you for being a reliable member of the SwapPay community!</p>
     `;
@@ -348,10 +397,64 @@ async function sendPendingReminderEmail(toEmail, partnerName, amount, location, 
     }
 }
 
+/**
+ * Multiple Partners Available Email Template
+ */
+async function sendMultiplePartnersAvailableEmail(toEmail, requiredAmount, partnersArray) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    let partnersHtml = '';
+    partnersArray.forEach(p => {
+        const ratingDisplay = p.rating ? `⭐${parseFloat(p.rating).toFixed(1)}` : 'New';
+        partnersHtml += `
+            <li style="margin-bottom: 8px;">
+                <strong>${p.name}</strong> — ₹${p.amount} — Rating: ${ratingDisplay} — ${p.location}
+            </li>
+        `;
+    });
+
+    const content = `
+        <p>Great news! Multiple partners are available for your <strong>₹${requiredAmount}</strong> swap request.</p>
+        
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Available Partners:</strong></p>
+            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                ${partnersHtml}
+            </ul>
+        </div>
+        
+        <p>Log in to SwapPay to choose your preferred partners.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="http://localhost:3000/dashboard" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Select Swap Partners</a>
+        </div>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Notifications" <${senderEmail}>`,
+        to: toEmail,
+        subject: `Multiple Swap Partners Available for Your ₹${requiredAmount} Request`,
+        html: getEmailTemplateWrapper("Matches Found", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Multiple Partners Available Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send email to ${toEmail}:`, error);
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
     sendSwapCompletedEmail,
     sendRatingReceivedEmail,
-    sendPendingReminderEmail
+    sendPendingReminderEmail,
+    sendPartialMatchEmail,
+    sendMultiplePartnersAvailableEmail
 };
