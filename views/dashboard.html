@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwapPay | Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .dashboard-container {
+            padding: 3rem 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .dashboard-header h1 {
+            font-size: 2.5rem;
+        }
+
+        .dashboard-header h1 span {
+            color: var(--accent-secondary);
+        }
+
+        .btn-logout {
+            padding: 0.6rem 1.5rem;
+            border-radius: 50px;
+            background: rgba(255, 60, 60, 0.1);
+            border: 1px solid rgba(255, 60, 60, 0.3);
+            color: #ff6b6b;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255, 60, 60, 0.2);
+        }
+
+        .dashboard-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-card h3 {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .stat-card .value.accent {
+            color: var(--accent-secondary);
+        }
+
+        .actions-panel {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+        }
+
+        .action-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 3rem 2rem;
+            text-align: center;
+            flex: 1;
+            max-width: 400px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .action-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-card h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .action-card p {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.8rem;
+        }
+
+        .modal-header h2 span {
+            color: var(--accent-secondary);
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .btn-close:hover {
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            color: white;
+            font-weight: 800;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        /* Available Swaps Area */
+        .swaps-section {
+            margin-top: 4rem;
+        }
+
+        .swaps-header {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .swaps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .swap-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .swap-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .swap-type-badge {
+            padding: 0.3rem 0.8rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .type-cash {
+            background: rgba(0, 206, 201, 0.2);
+            color: #00cec9;
+            border: 1px solid rgba(0, 206, 201, 0.3);
+        }
+
+        .type-upi {
+            background: rgba(108, 92, 231, 0.2);
+            color: #a29bfe;
+            border: 1px solid rgba(108, 92, 231, 0.3);
+        }
+
+        .swap-detail {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .swap-detail strong {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+        }
+
+        .btn-accept-swap {
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: none;
+            background: var(--text-primary);
+            color: var(--bg-color);
+            font-weight: 800;
+            cursor: pointer;
+            width: 100%;
+            margin-top: auto;
+            transition: background 0.3s;
+        }
+
+        .btn-accept-swap:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-primary {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            color: white;
+            border: none;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.8rem;
+        }
+
+        .modal-header h2 span {
+            color: var(--accent-secondary);
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Swaps Area */
+        .swaps-section {
+            margin-top: 4rem;
+        }
+
+        .swaps-header {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .swaps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .swap-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .swap-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .swap-type-badge {
+            padding: 0.3rem 0.8rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .type-cash {
+            background: rgba(0, 206, 201, 0.2);
+            color: #00cec9;
+            border: 1px solid rgba(0, 206, 201, 0.3);
+        }
+
+        .type-upi {
+            background: rgba(108, 92, 231, 0.2);
+            color: #a29bfe;
+            border: 1px solid rgba(108, 92, 231, 0.3);
+        }
+
+        .swap-detail {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .swap-detail strong {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+        }
+
+        .btn-accept-swap {
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: none;
+            background: var(--text-primary);
+            color: var(--bg-color);
+            font-weight: 800;
+            cursor: pointer;
+            width: 100%;
+            margin-top: auto;
+            transition: background 0.3s;
+        }
+
+        .btn-accept-swap:hover {
+            background: #e0e0e0;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            color: white;
+            font-weight: 800;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        /* Swap Status Styles */
+        .status-matched {
+            border-color: var(--accent-secondary) !important;
+            box-shadow: 0 0 15px rgba(232, 67, 147, 0.2);
+        }
+
+        .status-completed {
+            border-color: #00cec9 !important;
+            opacity: 0.8;
+        }
+
+        .btn-disabled {
+            background: #555 !important;
+            color: #999 !important;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
+
+        .status-text {
+            text-align: center;
+            font-weight: bold;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 8px;
+        }
+
+        .status-text.warning {
+            background: rgba(232, 67, 147, 0.1);
+            color: var(--accent-secondary);
+        }
+
+        .status-text.success {
+            background: rgba(0, 206, 201, 0.1);
+            color: #00cec9;
+        }
+
+        /* Tabs Styles */
+        .tabs-container {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-secondary);
+            background: rgba(232, 67, 147, 0.1);
+        }
+
+        /* Trend Animation */
+        .trend-up {
+            color: #00cec9;
+            font-size: 1.2rem;
+            margin-left: 0.5rem;
+            display: inline-block;
+            animation: floatUp 1s ease-out forwards;
+            opacity: 0;
+            transform: translateY(10px);
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.5);
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            50% {
+                opacity: 1;
+                transform: translateY(-5px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Pulse / Glow Animation for updated cards */
+        @keyframes glowUpdate {
+            0% {
+                box-shadow: 0 0 0 rgba(0, 206, 201, 0);
+                border-color: var(--glass-border);
+            }
+
+            50% {
+                box-shadow: 0 0 30px rgba(0, 206, 201, 0.4);
+                border-color: rgba(0, 206, 201, 0.8);
+            }
+
+            100% {
+                box-shadow: 0 0 0 rgba(0, 206, 201, 0);
+                border-color: var(--glass-border);
+            }
+        }
+
+        .glow-update {
+            animation: glowUpdate 1.5s ease-out;
+        }
+
+        /* Rating Stars */
+        .rating-stars {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem 0;
+            flex-direction: row-reverse;
+            /* For CSS peer hovering */
+        }
+
+        .rating-stars input {
+            display: none;
+        }
+
+        .rating-stars label {
+            font-size: 3rem;
+            color: var(--glass-border);
+            cursor: pointer;
+            transition: color 0.3s, transform 0.2s;
+        }
+
+        .rating-stars label:hover,
+        .rating-stars label:hover~label,
+        .rating-stars input:checked~label {
+            color: #ff9f43;
+        }
+
+        .rating-stars label:hover {
+            transform: scale(1.1);
+        }
+
+        .user-rating-badge {
+            font-size: 0.85rem;
+            color: #ff9f43;
+            background: rgba(255, 159, 67, 0.1);
+            padding: 0.2rem 0.6rem;
+            border-radius: 50px;
+            margin-left: 0.5rem;
+            font-weight: 600;
+        }
+
+        /* Notifications Structure */
+        .notification-container {
+            position: relative;
+            margin-right: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .bell-icon {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            transition: color 0.3s;
+        }
+
+        .bell-icon:hover {
+            color: var(--text-primary);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -8px;
+            background: #ff6b6b;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 50px;
+            display: none;
+            /* hidden by default */
+        }
+
+        .notification-dropdown {
+            position: absolute;
+            top: 150%;
+            right: -20px;
+            width: 350px;
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            max-height: 400px;
+            overflow-y: auto;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        .notification-dropdown.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-header {
+            padding: 0 1.5rem 1rem 1.5rem;
+            border-bottom: 1px solid var(--glass-border);
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+        }
+
+        .notification-item {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .notification-item:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .notification-item.unread {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .notification-item.unread p {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .notification-item p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .notification-time {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 0.5rem;
+            display: block;
+        }
+
+        .no-notifications {
+            padding: 2rem 1.5rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Toast Notification */
+        .toast-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+            border: 1px solid var(--accent-secondary);
+            border-left: 4px solid var(--accent-secondary);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            color: var(--text-primary);
+            padding: 15px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            min-width: 250px;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            font-size: 1.5rem;
+        }
+
+        .toast-message {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <nav class="navbar">
+        <div class="logo">Swap<span>Pay</span></div>
+        <ul class="nav-links" style="display: flex; align-items: center;">
+            <li class="notification-container" onclick="toggleNotifications(event)">
+                <div class="bell-icon">🔔</div>
+                <div class="notification-badge" id="notifBadge">0</div>
+
+                <div class="notification-dropdown" id="notifDropdown" onclick="event.stopPropagation()">
+                    <div class="dropdown-header">Notifications</div>
+                    <div id="notifList">
+                        <!-- Notifications will be injected here -->
+                    </div>
+                </div>
+            </li>
+            <li id="adminNavBtn" style="display: none;"><a href="/admin"
+                    style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin
+                    Panel</a></li>
+            <li><span style="color: var(--text-secondary); font-weight: 600;">Campus Mode Active</span></li>
+        </ul>
+    </nav>
+    <main class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Welcome to your <span>Dashboard</span></h1>
+            <a href="/api/auth/logout" class="btn-logout">Logout</a>
+        </div>
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <h3>Active Swaps</h3>
+                <div class="value">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Exchanged</h3>
+                <div class="value accent">₹0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Trust Score</h3>
+                <div class="value">100%</div>
+            </div>
+        </div>
+        <div class="actions-panel">
+            <div class="action-card" onclick="openModal('need_cash')">
+                <h3>Need Cash?</h3>
+                <p>Transfer UPI to a peer and get cash instantly on campus.</p>
+                <button class="btn-primary">Find Cash Match</button>
+            </div>
+            <div class="action-card" onclick="openModal('need_upi')">
+                <h3>Need UPI?</h3>
+                <p>Give cash to a peer and receive money directly to your bank.</p>
+                <button class="btn-primary">Find UPI Match</button>
+            </div>
+        </div>
+        <div class="swaps-section" style="margin-top: 2rem;">
+            <h2 class="swaps-header" style="font-size: 1.5rem; margin-bottom: 1rem;">My Swap Activity</h2>
+            <div class="tabs-container">
+                <button class="tab-btn active" onclick="switchTab('active')">Active</button>
+                <button class="tab-btn" onclick="switchTab('matched')">Matched</button>
+                <button class="tab-btn" onclick="switchTab('completed')">Completed</button>
+            </div>
+            <div class="swaps-grid" id="mySwapsContainer">
+                <p style="color: var(--text-secondary);">Loading your swaps...</p>
+            </div>
+        </div>
+        <div class="swaps-section">
+            <h2 class="swaps-header">Available Swaps Nearby</h2>
+            <div class="swaps-grid" id="swapsContainer">
+                <p style="color: var(--text-secondary);">Loading swaps...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Swap Modal -->
+    <div class="modal-overlay" id="swapModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Request <span>Swap</span></h2>
+                <button class="btn-close" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="swapForm">
+                <input type="hidden" id="swapType" name="swapType">
+                <div class="form-group">
+                    <label for="amount">Amount (₹)</label>
+                    <input type="number" id="amount" class="form-control" required min="10">
+                </div>
+                <div class="form-group">
+                    <label for="location">Meeting Location</label>
+                    <input type="text" id="location" class="form-control" required placeholder="e.g. Library, Canteen">
+                </div>
+                <button type="submit" id="submitBtn" class="btn-submit">Create Request</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rating Modal -->
+    <div class="modal-overlay" id="ratingModal">
+        <div class="modal-content" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Rate Your <span>Partner</span></h2>
+                <button class="btn-close" onclick="closeRatingModal()">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">How was your swap experience?</p>
+            <form id="ratingForm">
+                <input type="hidden" id="rateSwapId" name="swapId">
+                <div class="rating-stars">
+                    <input type="radio" id="star5" name="rating" value="5" required />
+                    <label for="star5" title="5 stars">★</label>
+                    <input type="radio" id="star4" name="rating" value="4" />
+                    <label for="star4" title="4 stars">★</label>
+                    <input type="radio" id="star3" name="rating" value="3" />
+                    <label for="star3" title="3 stars">★</label>
+                    <input type="radio" id="star2" name="rating" value="2" />
+                    <label for="star2" title="2 stars">★</label>
+                    <input type="radio" id="star1" name="rating" value="1" />
+                    <label for="star1" title="1 star">★</label>
+                </div>
+                <button type="submit" id="submitRatingBtn" class="btn-submit">Submit Rating</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        let currentUserId = null;
+        let socket = null;
+
+        /**
+         * Generic HTML Toast Helper
+         */
+        function showToast(message, icon = '📧') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-message">${message}</div>
+            `;
+            container.appendChild(toast);
+
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 100);
+
+            // Remove after 4s
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400);
+            }, 4000);
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('swapModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const swapTypeInput = document.getElementById('swapType');
+        const swapForm = document.getElementById('swapForm');
+
+        const ratingModal = document.getElementById('ratingModal');
+        const ratingForm = document.getElementById('ratingForm');
+        const rateSwapIdInput = document.getElementById('rateSwapId');
+
+        function openModal(type) {
+            swapTypeInput.value = type;
+
+            if (type === 'need_cash') {
+                modalTitle.innerHTML = 'Need <span>Cash</span>';
+            } else {
+                modalTitle.innerHTML = 'Need <span>UPI</span>';
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+            swapForm.reset();
+        }
+
+        function openRatingModal(swapId) {
+            rateSwapIdInput.value = swapId;
+            ratingModal.classList.add('active');
+        }
+
+        function closeRatingModal() {
+            ratingModal.classList.remove('active');
+            ratingForm.reset();
+        }
+
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+            if (event.target == ratingModal) {
+                closeRatingModal();
+            }
+        }
+
+        // Handle Swap Creation
+        swapForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            const payload = {
+                type: swapTypeInput.value,
+                amount: document.getElementById('amount').value,
+                location: document.getElementById('location').value
+            };
+
+            try {
+                const response = await fetch('/api/swaps/createSwap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    closeModal();
+                    showToast('Swap request created successfully!');
+                    loadSwaps(); // Reload the list
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to create swap.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Request';
+            }
+        });
+
+        // Handle Rating Submission
+        ratingForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitRatingBtn');
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            const payload = {
+                stars: document.querySelector('input[name="rating"]:checked').value
+            };
+            const swapId = rateSwapIdInput.value;
+
+            try {
+                const response = await fetch('/api/swaps/rateSwap/' + swapId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    closeRatingModal();
+                    showToast('Thanks for rating your swap partner!', '⭐');
+                    loadAllData(); // Refresh UI to update Trust Scores completely
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to submit rating.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Rating';
+            }
+        });
+
+        // Maintain previous states for animations
+        let prevStats = { activeSwaps: null, totalExchanged: null, trustScore: null };
+
+        function animateValue(obj, start, end, duration, prefix = '', suffix = '') {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+
+                let currentVal = progress * (end - start) + start;
+
+                // Formatting
+                if (suffix === '%') currentVal = currentVal.toFixed(1);
+                else currentVal = Math.floor(currentVal);
+
+                obj.innerHTML = prefix + currentVal + suffix;
+
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerHTML = prefix + end + suffix; // exact final value
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        function triggerCardGlow(cardElement) {
+            cardElement.classList.add('glow-update');
+            setTimeout(() => cardElement.classList.remove('glow-update'), 1500);
+        }
+
+        // Load Dashboard Statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/swaps/stats');
+                if (response.ok) {
+                    const data = await response.json();
+                    const valueDivs = document.querySelectorAll('.dashboard-stats .value');
+
+                    if (valueDivs.length >= 3) {
+                        const newActive = parseInt(data.activeSwaps) || 0;
+                        const newTotal = parseFloat(data.totalExchanged) || 0;
+                        const newTrust = parseFloat((data.trustScore || '0').replace('%', ''));
+
+                        const isInitialLoad = prevStats.activeSwaps === null;
+
+                        const prevActive = isInitialLoad ? newActive : prevStats.activeSwaps;
+                        const prevTotal = isInitialLoad ? newTotal : prevStats.totalExchanged;
+                        const prevTrust = isInitialLoad ? newTrust : prevStats.trustScore;
+
+                        // Active Swaps
+                        if (!isInitialLoad && newActive !== prevActive) {
+                            animateValue(valueDivs[0], prevActive, newActive, 1000);
+                            triggerCardGlow(valueDivs[0].parentElement);
+                        } else {
+                            valueDivs[0].innerHTML = data.activeSwaps;
+                        }
+
+                        // Total Exchanged
+                        if (!isInitialLoad && newTotal !== prevTotal) {
+                            animateValue(valueDivs[1], prevTotal, newTotal, 1500, '₹');
+                            if (newTotal > prevTotal) {
+                                setTimeout(() => {
+                                    valueDivs[1].innerHTML += ' <span class="trend-up">↑</span>';
+                                }, 1500);
+                            }
+                            triggerCardGlow(valueDivs[1].parentElement);
+                        } else {
+                            valueDivs[1].innerHTML = '₹' + newTotal;
+                        }
+
+                        // Trust Score
+                        if (!isInitialLoad && newTrust !== prevTrust) {
+                            animateValue(valueDivs[2], prevTrust, newTrust, 1500, '', '%');
+                            if (newTrust > prevTrust) {
+                                setTimeout(() => {
+                                    valueDivs[2].innerHTML += ' <span class="trend-up">↑</span>';
+                                }, 1500);
+                            }
+                            triggerCardGlow(valueDivs[2].parentElement);
+                        } else {
+                            valueDivs[2].innerHTML = data.trustScore;
+                        }
+
+                        prevStats = { activeSwaps: newActive, totalExchanged: newTotal, trustScore: newTrust };
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load stats', err);
+            }
+        }
+
+        let currentTab = 'active'; // active, matched, completed
+
+        window.switchTab = function (tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.innerText.toLowerCase() === tabName || (tabName === 'active' && btn.innerText === 'Active')) {
+                    btn.classList.add('active');
+                }
+            });
+            loadMySwaps();
+        };
+
+        // Create swap card HTML string
+        function createSwapCardHTML(swap, isMyContext) {
+            const isNeedingCash = swap.type === 'need_cash';
+            const badgeClass = isNeedingCash ? 'type-cash' : 'type-upi';
+            const badgeText = isNeedingCash ? 'Needs Cash' : 'Needs UPI';
+
+            let statusClass = '';
+            if (swap.status === 'matched') statusClass = 'status-matched';
+            if (swap.status === 'completed') statusClass = 'status-completed';
+
+            // Determine proper rating value to show
+            const ratingVal = isMyContext ? swap.otherPartyRating : swap.requester_rating;
+            const formattedRating = ratingVal ? (parseFloat(ratingVal)).toFixed(1) : 'New';
+            const ratingBadge = `<span class="user-rating-badge" title="User's Average Rating">★ ${formattedRating}</span>`;
+
+            let actionArea = '';
+
+            if (isMyContext) {
+                // My Swap Context
+                if (swap.status === 'open') {
+                    actionArea = `<div class="status-text warning" style="color: var(--text-secondary); background: none;">Waiting for peer</div>`;
+                } else if (swap.status === 'matched') {
+                    let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
+
+                    if (hasCompleted) {
+                        actionArea = `
+                            <div class="status-text warning" style="color: #f59e0b; border-color: #f59e0b;">Waiting for Partner to Confirm</div>
+                            <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem; background: #64748b;">Confirmed by You</button>
+                        `;
+                    } else {
+                        actionArea = `
+                            <div class="status-text warning">Swap Matched – Waiting for Completion</div>
+                            <button class="btn-accept-swap" onclick="completeSwap(${swap.id})" style="margin-top: 1rem;">Mark as Completed</button>
+                        `;
+                    }
+                } else if (swap.status === 'completed') {
+                    actionArea = `
+                        <div class="status-text success">Completed</div>
+                        <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem;">Completed</button>
+                        <button class="btn-accept-swap" onclick="openRatingModal(${swap.id})" style="margin-top: 0.5rem; background: rgba(255,159,67,0.1); border: 1px solid #ff9f43; color: #ff9f43;">Review this Swap</button>
+                    `;
+                }
+            } else {
+                // Available Swaps Context (always open)
+                const actionText = isNeedingCash ? 'Give Cash (Pay via UPI)' : 'Transfer UPI (Take Cash)';
+                actionArea = `<button class="btn-accept-swap" onclick="acceptSwap(${swap.id})">${actionText}</button>`;
+            }
+
+            const headerName = isMyContext ? (swap.isCreator ? 'You' : swap.otherPartyName) : swap.requester_name;
+
+            return ` 
+            <div class="swap-card ${statusClass}" > 
+                <div class="swap-card-header" > 
+                    <div> 
+                        <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;" >${headerName} ${headerName !== 'You' ? ratingBadge : ''}</h3> 
+                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span> 
+                    </div> 
+                    <div style="text-align: right;" > 
+                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary)" >₹${swap.amount}</div> 
+                    </div> 
+                </div> 
+                <div class="swap-detail" style="margin-top: 1rem;" > 
+                    <span>Location:</span> <strong>${swap.location}</strong> 
+                </div> 
+                <div class="swap-detail" > 
+                    <span>Posted:</span> <strong>${new Date(swap.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong> 
+                </div> 
+                ${actionArea}
+            </div> 
+            `;
+        }
+
+        // Load My Swaps Activity
+        async function loadMySwaps() {
+            const container = document.getElementById('mySwapsContainer');
+            try {
+                const response = await fetch('/api/swaps/mySwaps');
+                if (!response.ok) throw new Error('Failed to fetch my swaps');
+
+                const swaps = await response.json();
+
+                // Filter based on tab
+                const filteredSwaps = swaps.filter(swap => {
+                    if (currentTab === 'active') return swap.status === 'open';
+                    if (currentTab === 'matched') return swap.status === 'matched';
+                    if (currentTab === 'completed') return swap.status === 'completed';
+                    return false;
+                });
+
+                container.innerHTML = '';
+
+                if (filteredSwaps.length === 0) {
+                    container.innerHTML = `<p style="color: var(--text-secondary);">No ${currentTab} swaps found.</p>`;
+                    return;
+                }
+
+                filteredSwaps.forEach(swap => {
+                    container.innerHTML += createSwapCardHTML(swap, true);
+                });
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = '<p style="color: #ff6b6b;">Failed to load your swaps.</p>';
+            }
+        }
+
+        // Load Open Available Swaps
+        async function loadSwaps() {
+            const container = document.getElementById('swapsContainer');
+
+            try {
+                const response = await fetch('/api/swaps/swaps');
+                if (!response.ok) throw new Error('Failed to fetch');
+
+                const swaps = await response.json();
+                container.innerHTML = '';
+
+                if (swaps.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-secondary);">No active swaps found nearby. Be the first to request one!</p>';
+                    return;
+                }
+
+                swaps.forEach(swap => {
+                    container.innerHTML += createSwapCardHTML(swap, false);
+                });
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = '<p style="color: #ff6b6b;">Failed to load swaps. Please refresh.</p>';
+            }
+        }
+
+        // Accept Swap
+        window.acceptSwap = async function (swapId) {
+            if (!confirm('Are you sure you want to accept this swap? You must meet at the location.')) return;
+
+            try {
+                const response = await fetch('/api/swaps/acceptSwap/' + swapId, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showToast('Swap matched! Proceed to the location to exchange.', '🎉');
+                    loadAllData(); // Reload both lists and stats
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to accept swap.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            }
+        }
+
+        // Complete Swap
+        window.completeSwap = async function (swapId) {
+            if (!confirm('Are you sure you want to mark this exchange as completed?')) return;
+
+            try {
+                const response = await fetch('/api/swaps/completeSwap/' + swapId, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showToast('Swap successfully marked as completed!', '✅');
+                    loadAllData();
+                    // Open the rating modal immediately after completion
+                    openRatingModal(swapId);
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to complete swap.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            }
+        }
+
+        // Fetch user info to initialize Socket.IO
+        async function fetchCurrentUser() {
+            try {
+                const response = await fetch('/api/auth/me'); // We need to add this endpoint
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUserId = data.id;
+                    initializeSocket();
+                }
+            } catch (err) {
+                console.error('Failed to fetch user session info for socket.', err);
+            }
+        }
+
+        // Initialize Socket.io Connection
+        function initializeSocket() {
+            if (!currentUserId) return;
+
+            socket = io();
+
+            // Join private room
+            socket.emit('join', currentUserId);
+
+            // Listen for incoming notifications
+            socket.on('notification', (data) => {
+                // Show toast
+                let icon = '🔔';
+                if (data.type === 'match') icon = '🎉';
+                if (data.type === 'completed') icon = '✅';
+                if (data.type === 'rating') icon = '⭐';
+                if (data.type === 'admin') icon = '⚠️';
+
+                showToast(`<strong>${data.title}</strong><br>${data.message}`, icon);
+
+                // Play Sound
+                playNotificationSound();
+
+                // Refresh Notifications dropdown
+                loadNotifications();
+
+                // Refresh Swaps (in case of match or complete)
+                if (data.type === 'match' || data.type === 'completed') {
+                    loadAllData();
+                }
+            });
+        }
+
+        // Play Sound
+        function playNotificationSound() {
+            try {
+                // simple beep using Web Audio API
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioCtx = new AudioContext();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+                oscillator.frequency.exponentialRampToValueAtTime(880.00, audioCtx.currentTime + 0.1); // A5
+
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            } catch (e) {
+                console.log('Audio disabled or unsupported');
+            }
+        }
+
+        // Notification UI Logic
+        function toggleNotifications(event) {
+            const dropdown = document.getElementById('notifDropdown');
+            dropdown.classList.toggle('active');
+            event.stopPropagation();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (event) => {
+            const dropdown = document.getElementById('notifDropdown');
+            const container = document.querySelector('.notification-container');
+            if (!container.contains(event.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        async function loadNotifications() {
+            try {
+                const res = await fetch('/api/notifications');
+                if (res.ok) {
+                    const notifications = await res.json();
+                    renderNotifications(notifications);
+                }
+            } catch (err) {
+                console.error('Failed to load notifications', err);
+            }
+        }
+
+        function renderNotifications(notifications) {
+            const list = document.getElementById('notifList');
+            const badge = document.getElementById('notifBadge');
+            list.innerHTML = '';
+
+            let unreadCount = 0;
+
+            if (notifications.length === 0) {
+                list.innerHTML = '<div class="no-notifications">No new notifications</div>';
+            } else {
+                notifications.forEach(n => {
+                    if (!n.is_read) unreadCount++;
+
+                    const timeAgo = new Date(n.created_at).toLocaleString();
+                    const readClass = n.is_read ? '' : 'unread';
+
+                    list.innerHTML += `
+                        <div class="notification-item ${readClass}" onclick="markAsRead(${n.id}, this, event)">
+                            <p>${n.message}</p>
+                            <span class="notification-time">${timeAgo}</span>
+                        </div>
+                    `;
+                });
+
+                // Add Clear All Action
+                list.innerHTML += `
+                    <div style="padding: 1rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.05);">
+                        <button onclick="clearAllNotifications(event)" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 0.9rem; font-weight: 600;">Clear All</button>
+                    </div>
+                `;
+            }
+
+            if (unreadCount > 0) {
+                badge.style.display = 'block';
+                badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        async function markAsRead(id, element, event) {
+            event.stopPropagation();
+            if (!element.classList.contains('unread')) return;
+
+            try {
+                const res = await fetch(`/api/notifications/read/${id}`, { method: 'PUT' });
+                if (res.ok) {
+                    element.classList.remove('unread');
+                    loadNotifications(); // Refresh badge
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function clearAllNotifications(event) {
+            event.stopPropagation();
+            if (!confirm("Are you sure you want to clear all notifications?")) return;
+            try {
+                const res = await fetch(`/api/notifications`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadNotifications();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Refresh all data
+        function loadAllData() {
+            fetchCurrentUser();
+            loadStats();
+            loadMySwaps();
+            loadSwaps();
+            loadNotifications();
+        }
+
+        // Initial Load
+        document.addEventListener('DOMContentLoaded', loadAllData);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwapPay - Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary-bg: #0f172a;
+            --secondary-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --accent-danger: #ef4444;
+            --accent-success: #10b981;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        body {
+            background-color: var(--primary-bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Blobs for background */
+        .blob {
+            position: absolute;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.5;
+            animation: float 10s infinite ease-in-out;
+        }
+
+        .blob-1 {
+            top: -100px;
+            left: -100px;
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 50%;
+        }
+
+        .blob-2 {
+            bottom: -100px;
+            right: -100px;
+            width: 500px;
+            height: 500px;
+            background: linear-gradient(135deg, #e84393, #6c5ce7);
+            border-radius: 50%;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0) scale(1);
+            }
+
+            50% {
+                transform: translateY(-20px) scale(1.05);
+            }
+        }
+
+        /* Navbar */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo span {
+            color: var(--accent-primary);
+            -webkit-text-fill-color: var(--accent-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a.btn-logout {
+            color: var(--accent-danger);
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0.5rem 1.5rem;
+            border: 1px solid var(--accent-danger);
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a.btn-logout:hover {
+            background: rgba(239, 68, 68, 0.1);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+        }
+
+        /* Dashboard Container */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 3rem auto;
+            padding: 0 2rem;
+        }
+
+        .dashboard-header {
+            margin-bottom: 2rem;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .dashboard-header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-title {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #00cec9;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.3);
+        }
+
+        /* Table Section */
+        .section-box {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        th {
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Action Buttons inside tables */
+        .btn-action {
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-block {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+            border: 1px solid var(--accent-danger);
+        }
+
+        .btn-block:hover {
+            background: var(--accent-danger);
+            color: white;
+        }
+
+        /* Settings Toggle */
+        .settings-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+            border-radius: 34px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: var(--accent-success);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(24px);
+        }
+
+        .btn-unblock {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-success);
+            border: 1px solid var(--accent-success);
+        }
+
+        .btn-unblock:hover {
+            background: var(--accent-success);
+            color: white;
+        }
+
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+            border: 1px solid var(--accent-danger);
+        }
+
+        .btn-delete:hover {
+            background: var(--accent-danger);
+            color: white;
+        }
+
+        /* Status Badges */
+        .badge {
+            padding: 0.3rem 0.6rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-open {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent-primary);
+        }
+
+        .badge-matched {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .badge-completed {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-success);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <nav class="navbar">
+        <div class="logo">Swap<span>Pay</span> Admin</div>
+        <ul class="nav-links">
+            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none;">Back to App</a></li>
+            <li><a href="/api/auth/logout" class="btn-logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="dashboard-container">
+        <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Platform Overview</h1>
+                <p>Monitor SwapPay statistics, users, and transactions.</p>
+            </div>
+            <button onclick="downloadReport()"
+                style="background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);">
+                📥 Download Platform Report
+            </button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-title">Total Users</div>
+                <div class="stat-value" id="statsUsers">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔄</div>
+                <div class="stat-title">Total Swaps</div>
+                <div class="stat-value" id="statsSwaps">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-title">Completed Swaps</div>
+                <div class="stat-value" id="statsCompleted">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💵</div>
+                <div class="stat-title">Total Exchanged</div>
+                <div class="stat-value" id="statsVolume">...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-title">Avg User Rating</div>
+                <div class="stat-value" id="statsRating">...</div>
+            </div>
+        </div>
+
+        <div class="section-box">
+            <div class="section-header">
+                <h2>User Management</h2>
+            </div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>College</th>
+                            <th>Total Swaps</th>
+                            <th>Avg Rating</th>
+                            <th>Status/Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- User rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div>
+                <h3>Email Notifications</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 5px;">Enable or disable automated
+                    email system</p>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="emailToggle" onchange="toggleEmailNotifications(this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="settings-card">
+            <div>
+                <h3>Reminder Interval</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 5px;">Time between emails (in
+                    hours)</p>
+            </div>
+            <input type="number" id="intervalInput" min="1" max="72" value="1"
+                style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-light); color: var(--text-primary); text-align: center; width: 60px;"
+                onchange="updateSetting('reminder_interval_hours', this.value)">
+        </div>
+        <div class="settings-card">
+            <div>
+                <h3>Max Reminders</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 5px;">Before auto-cancel warning
+                </p>
+            </div>
+            <input type="number" id="maxRemindersInput" min="1" max="100" value="6"
+                style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-light); color: var(--text-primary); text-align: center; width: 60px;"
+                onchange="updateSetting('max_reminders', this.value)">
+        </div>
+
+        <div class="section-box">
+            <div class="section-header">
+                <h2>Swap History</h2>
+            </div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Swap ID</th>
+                            <th>Type</th>
+                            <th>Amount (₹)</th>
+                            <th>Creator</th>
+                            <th>Matched With</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="swapsTableBody">
+                        <!-- Swap rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section-box"
+            style="margin-top: 3rem; background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2);">
+            <div class="section-header">
+                <h2>Live Platform Activity <span class="trend-up"
+                        style="font-size: 1rem; color: #ff6b6b; animation: pulse 1.5s infinite; vertical-align: middle; margin-left: 10px;">🔴
+                        LIVE</span></h2>
+            </div>
+            <div id="activityLog"
+                style="background: rgba(0,0,0,0.3); border-radius: 12px; height: 250px; overflow-y: auto; padding: 1rem; border: 1px inset rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 8px;">
+                <p style="color: var(--text-secondary); text-align: center; margin-top: 15%;">Waiting for live
+                    activity...</p>
+            </div>
+        </div>
+
+    </main>
+
+    <style>
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+                text-shadow: 0 0 5px rgba(255, 107, 107, 0.5);
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.7;
+                text-shadow: 0 0 15px rgba(255, 107, 107, 0.8);
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+                text-shadow: 0 0 5px rgba(255, 107, 107, 0.5);
+            }
+        }
+
+        .log-entry {
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+            padding: 10px 15px;
+            border-left: 3px solid var(--accent-secondary);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .log-entry.match {
+            border-left-color: #ff9f43;
+        }
+
+        .log-entry.completed {
+            border-left-color: #00cec9;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
+
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        // Init Socket.IO for global admin tracking
+        const socket = io();
+
+        socket.on('admin_activity', (data) => {
+            const logBox = document.getElementById('activityLog');
+
+            // Remove 'waiting' message if present
+            if (logBox.innerHTML.includes('Waiting for live activity')) {
+                logBox.innerHTML = '';
+            }
+
+            let typeClass = '';
+            if (data.event.includes('Matched')) typeClass = 'match';
+            if (data.event.includes('Completed')) typeClass = 'completed';
+
+            const timeString = new Date().toLocaleTimeString();
+            const logHTML = `
+                <div class="log-entry ${typeClass}">
+                    <span style="color: var(--text-secondary); font-size: 0.8rem;">[${timeString}]</span> 
+                    <strong style="color: var(--text-primary);">${data.event}:</strong> 
+                    <span style="color: #cbd5e1;">${data.details}</span>
+                </div>
+            `;
+
+            // Append at the top
+            logBox.insertAdjacentHTML('afterbegin', logHTML);
+
+            // Limit log size memory
+            if (logBox.children.length > 50) {
+                logBox.removeChild(logBox.lastChild);
+            }
+        });
+        async function loadAdminData() {
+            try {
+                // Load Stats
+                const statsResponse = await fetch('/api/admin/stats');
+                if (statsResponse.ok) {
+                    const stats = await statsResponse.json();
+                    document.getElementById('statsUsers').innerText = stats.usersCount;
+                    document.getElementById('statsSwaps').innerText = stats.totalSwaps;
+                    document.getElementById('statsCompleted').innerText = stats.completedSwaps;
+                    document.getElementById('statsVolume').innerText = '₹' + stats.totalExchanged;
+                    document.getElementById('statsRating').innerText = stats.avgRating ? parseFloat(stats.avgRating).toFixed(1) : 'N/A';
+                }
+
+                // Load Users
+                const usersResponse = await fetch('/api/admin/users');
+                if (usersResponse.ok) {
+                    const users = await usersResponse.json();
+                    const tbody = document.getElementById('usersTableBody');
+                    tbody.innerHTML = '';
+                    users.forEach(user => {
+                        const rating = user.avg_rating ? parseFloat(user.avg_rating).toFixed(1) : 'New';
+                        const actionBtn = user.is_blocked
+                            ? `<button class="btn-action btn-unblock" onclick="blockUser(${user.id})">Unblock</button>`
+                            : `<button class="btn-action btn-block" onclick="blockUser(${user.id})">Block</button>`;
+
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>#${user.id}</td>
+                                <td><strong>${user.name}</strong></td>
+                                <td>${user.email}</td>
+                                <td>${user.college}</td>
+                                <td>${user.total_swaps}</td>
+                                <td>⭐ ${rating}</td>
+                                <td>${actionBtn}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                // Load Swaps
+                const swapsResponse = await fetch('/api/admin/swaps');
+                if (swapsResponse.ok) {
+                    const swaps = await swapsResponse.json();
+                    const tbody = document.getElementById('swapsTableBody');
+                    tbody.innerHTML = '';
+                    swaps.forEach(swap => {
+                        const type = swap.type === 'need_cash' ? 'Needs Cash' : 'Needs UPI';
+                        const matched = swap.matched_name || '-';
+                        const date = new Date(swap.created_at).toLocaleDateString();
+                        const statusBadge = `<span class="badge badge-${swap.status}">${swap.status.toUpperCase()}</span>`;
+
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>#${swap.id}</td>
+                                <td>${type}</td>
+                                <td style="color:#00cec9; font-weight:bold;">₹${swap.amount}</td>
+                                <td>${swap.creator_name}</td>
+                                <td>${matched}</td>
+                                <td>${statusBadge}</td>
+                                <td>${date}</td>
+                                <td><button class="btn-action btn-delete" onclick="deleteSwap(${swap.id})">Delete</button></td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                // Load Settings
+                const settingsResponse = await fetch('/api/admin/settings');
+                if (settingsResponse.ok) {
+                    const settings = await settingsResponse.json();
+                    const toggle = document.getElementById('emailToggle');
+                    if (settings.email_notifications_enabled === 'true') {
+                        toggle.checked = true;
+                    } else {
+                        toggle.checked = false;
+                    }
+                    if (settings.reminder_interval_hours) {
+                        document.getElementById('intervalInput').value = settings.reminder_interval_hours;
+                    }
+                    if (settings.max_reminders) {
+                        document.getElementById('maxRemindersInput').value = settings.max_reminders;
+                    }
+                }
+
+            } catch (err) {
+                console.error("Error loading admin data:", err);
+            }
+        }
+
+        async function toggleEmailNotifications(isEnabled) {
+            updateSetting('email_notifications_enabled', isEnabled ? 'true' : 'false');
+        }
+
+        async function updateSetting(key, value) {
+            try {
+                const res = await fetch('/api/admin/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, value })
+                });
+                if (!res.ok) {
+                    alert(`Failed to update ${key}.`);
+                    loadAdminData(); // Revert visually
+                }
+            } catch (e) {
+                alert('Error updating setting.');
+                loadAdminData();
+            }
+        }
+
+        async function blockUser(id) {
+            if (!confirm('Are you sure you want to change this user block status?')) return;
+            try {
+                const res = await fetch(`/api/admin/block/${id}`, { method: 'PUT' });
+                if (res.ok) {
+                    loadAdminData();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to block user');
+                }
+            } catch (e) {
+                alert('Error processing request.');
+            }
+        }
+
+        async function deleteSwap(id) {
+            if (!confirm('WARNING: Are you sure you want to delete this swap completely? This cannot be undone.')) return;
+            try {
+                const res = await fetch(`/api/admin/swap/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadAdminData();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to delete swap');
+                }
+            } catch (e) {
+                alert('Error processing request.');
+            }
+        }
+
+        async function downloadReport() {
+            try {
+                const res = await fetch('/api/admin/report');
+                if (!res.ok) throw new Error('Failed to generate report');
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'SwapPay_Admin_Report.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Error downloading report.');
+                console.error(err);
+            }
+        }
+
+        // Init
+        loadAdminData();
+    </script>
+</body>
+
+</html>
