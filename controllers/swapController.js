@@ -32,24 +32,115 @@ exports.createSwap = async (req, res) => {
     }
 
     try {
-        const query = 'INSERT INTO swaps (user_id, type, amount, location, status) VALUES (?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(query, [userId, type, amount, location, 'open']);
+        // --- AUTO-MATCHING LOGIC ---
+        const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
 
-        // Send Email Notification
-        try {
-            const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
-            if (userRows.length > 0) {
-                const { sendSwapCreatedEmail } = require('../utils/emailService');
-                await sendSwapCreatedEmail(userRows[0].email, type, amount, location);
+        // Find an open swap with the EXACT same amount and opposite type from a DIFFERENT user
+        const findMatchQuery = `
+            SELECT * FROM swaps 
+            WHERE status = 'open' 
+              AND amount = ? 
+              AND type = ? 
+              AND user_id != ? 
+            ORDER BY created_at ASC 
+            LIMIT 1
+        `;
+        const [matchRows] = await promisePool.execute(findMatchQuery, [amount, oppositeType, userId]);
+
+        if (matchRows.length > 0) {
+            // A PERFECT MATCH FOUND! 
+            const matchedSwap = matchRows[0];
+            const originalUserId = matchedSwap.user_id;
+            const swapId = matchedSwap.id;
+
+            // 1. Update the existing swap to 'matched' instantly
+            const updateQuery = 'UPDATE swaps SET status = ?, matched_user_id = ?, match_time = NOW() WHERE id = ?';
+            await promisePool.execute(updateQuery, ['matched', userId, swapId]);
+
+            // 2. Add Notifications
+            const msg = `Perfect Match Found! Your swap request has been matched! Please proceed to the meeting location.`;
+            const title = 'Swap Matched';
+            const alertType = 'match';
+
+            // Notify original user
+            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [originalUserId, title, msg, alertType]);
+            // Notify current user
+            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, title, msg, alertType]);
+
+            // 3. Emit Socket Events to BOTH users immediately
+            if (global.io) {
+                global.io.to(`user_${originalUserId}`).emit('notification', { title, message: msg, type: alertType, created_at: new Date() });
+                global.io.to(`user_${userId}`).emit('notification', { title, message: msg, type: alertType, created_at: new Date() });
+
+                global.io.emit('admin_activity', {
+                    event: 'Instant Auto-Match',
+                    swapId,
+                    details: `Swap #${swapId} was instantly auto-matched between users ${originalUserId} and ${userId}.`
+                });
             }
-        } catch (e) {
-            console.error('Error sending create swap email', e);
+
+            // 4. Send Instant Dual-Emails
+            (async () => {
+                try {
+                    const [creatorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [originalUserId]);
+                    const [acceptorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+
+                    if (creatorRows.length > 0 && acceptorRows.length > 0) {
+                        const creator = creatorRows[0];
+                        const acceptor = acceptorRows[0];
+                        const { sendSwapMatchedEmail } = require('../utils/emailService');
+
+                        // Send to the Original Creator
+                        await sendSwapMatchedEmail(
+                            creator.email,
+                            creator.name,
+                            acceptor.name,
+                            acceptor.email,
+                            matchedSwap.type === 'need_cash' ? 'Need Cash' : 'Need UPI',
+                            amount,
+                            matchedSwap.location // Use existing location for meetup
+                        );
+
+                        // Send to the Current User
+                        await sendSwapMatchedEmail(
+                            acceptor.email,
+                            acceptor.name,
+                            creator.name,
+                            creator.email,
+                            matchedSwap.type === 'need_cash' ? 'Need UPI' : 'Need Cash',
+                            amount,
+                            matchedSwap.location // Use existing location for meetup
+                        );
+                    }
+                } catch (e) {
+                    console.error('Error in instant auto-match email block:', e);
+                }
+            })();
+
+            return res.status(200).json({ message: 'Perfect match found! Request instantly auto-matched.', swapId: swapId, isAutoMatched: true });
+
+        } else {
+            // --- NO MATCH FOUND: CREATE NEW OPEN SWAP ---
+            const query = 'INSERT INTO swaps (user_id, type, amount, location, status) VALUES (?, ?, ?, ?, ?)';
+            const [result] = await promisePool.execute(query, [userId, type, amount, location, 'open']);
+
+            // Send standard 'Swap Created' Email Notification
+            try {
+                const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+                if (userRows.length > 0) {
+                    const { sendSwapCreatedEmail } = require('../utils/emailService');
+                    await sendSwapCreatedEmail(userRows[0].email, type, amount, location);
+                }
+            } catch (e) {
+                console.error('Error sending create swap email', e);
+            }
+
+            return res.status(201).json({ message: 'Swap request created and waiting for a match.', swapId: result.insertId, isAutoMatched: false });
         }
 
-        res.status(201).json({ message: 'Swap request created successfully.', swapId: result.insertId });
     } catch (error) {
-        console.error('Error creating swap:', error);
-        res.status(500).json({ error: 'An error occurred while creating the swap.' });
+        console.error('Error creating/matching swap:', error);
+        res.status(500).json({ error: 'An error occurred while matching or creating the swap.' });
     }
 };
 
@@ -80,105 +171,7 @@ exports.getOpenSwaps = async (req, res) => {
     }
 };
 
-// Accept a swap request
-exports.acceptSwap = async (req, res) => {
-    const swapId = req.params.id;
-    const userId = req.session.userId;
 
-    if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized. Please log in.' });
-    }
-
-    try {
-        // First check if the swap is still open
-        const checkQuery = 'SELECT * FROM swaps WHERE id = ?';
-        const [rows] = await promisePool.execute(checkQuery, [swapId]);
-
-        if (rows.length === 0) {
-            return res.status(404).json({ error: 'Swap request not found.' });
-        }
-
-        if (rows[0].status !== 'open') {
-            return res.status(400).json({ error: 'This swap request has already been accepted or completed.' });
-        }
-
-        if (rows[0].user_id === userId) {
-            return res.status(400).json({ error: 'You cannot accept your own swap request.' });
-        }
-
-        // Update the swap status to 'matched', save matched_user_id, and set match_time
-        const updateQuery = 'UPDATE swaps SET status = ?, matched_user_id = ?, match_time = NOW() WHERE id = ?';
-        await promisePool.execute(updateQuery, ['matched', userId, swapId]);
-
-        // Send Notification to original user
-        const originalUserId = rows[0].user_id;
-        const msg = `Your swap request has been matched! Please proceed to the meeting location.`;
-        const title = 'Swap Matched';
-        const type = 'match';
-        await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [originalUserId, title, msg, type]);
-
-        // Emit Socket Event
-        if (global.io) {
-            global.io.to(`user_${originalUserId}`).emit('notification', {
-                title, message: msg, type, created_at: new Date()
-            });
-            global.io.emit('admin_activity', {
-                event: 'Swap Matched',
-                swapId,
-                details: `Swap #${swapId} was matched.`
-            });
-        }
-
-        // Email Notification
-        // Wrapping in self-executing async to not block the current request process
-        (async () => {
-            try {
-                const [creatorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [originalUserId]);
-                const [acceptorRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-
-                if (creatorRows.length > 0 && acceptorRows.length > 0) {
-                    const creator = creatorRows[0];
-                    const acceptor = acceptorRows[0];
-                    const { type, amount, location } = rows[0];
-
-                    const { sendSwapMatchedEmail } = require('../utils/emailService');
-
-                    // 1. Send to the person who originally created the swap request
-                    await sendSwapMatchedEmail(
-                        creator.email,
-                        creator.name,
-                        acceptor.name,
-                        acceptor.email,
-                        type === 'need_cash' ? 'Need Cash' : 'Need UPI',
-                        amount,
-                        location
-                    );
-
-                    // 2. Send to the person who just clicked "Accept"
-                    await sendSwapMatchedEmail(
-                        acceptor.email,
-                        acceptor.name,
-                        creator.name,
-                        creator.email,
-                        type === 'need_cash' ? 'Need UPI' : 'Need Cash',
-                        amount,
-                        location
-                    );
-                }
-            } catch (e) {
-                console.error('Error in swap match email block:', e);
-            }
-        })();
-
-        // In a real application, you might insert a record into a `matches` table here
-        // linking the original user_id and the accepting userId.
-
-        res.status(200).json({ message: 'Swap request accepted successfully.' });
-    } catch (error) {
-        console.error('Error accepting swap:', error);
-        res.status(500).json({ error: 'An error occurred while accepting the swap.' });
-    }
-};
 
 // Complete a swap request
 exports.completeSwap = async (req, res) => {
@@ -190,7 +183,7 @@ exports.completeSwap = async (req, res) => {
     }
 
     try {
-        const checkQuery = 'SELECT status, user_id, matched_user_id, creator_completed, acceptor_completed FROM swaps WHERE id = ?';
+        const checkQuery = 'SELECT status, user_id, matched_user_id, creator_completed, acceptor_completed, amount FROM swaps WHERE id = ?';
         const [rows] = await promisePool.execute(checkQuery, [swapId]);
 
         if (rows.length === 0) {

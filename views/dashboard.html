@@ -1220,8 +1220,8 @@
                 }
             } else {
                 // Available Swaps Context (always open)
-                const actionText = isNeedingCash ? 'Give Cash (Pay via UPI)' : 'Transfer UPI (Take Cash)';
-                actionArea = `<button class="btn-accept-swap" onclick="acceptSwap(${swap.id})">${actionText}</button>`;
+                const actionText = isNeedingCash ? 'Create a "Need UPI" Swap to Match' : 'Create a "Need Cash" Swap to Match';
+                actionArea = `<button class="btn-accept-swap btn-disabled" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); cursor: default;">${actionText}</button>`;
             }
 
             const headerName = isMyContext ? (swap.isCreator ? 'You' : swap.otherPartyName) : swap.requester_name;
@@ -1306,27 +1306,6 @@
             }
         }
 
-        // Accept Swap
-        window.acceptSwap = async function (swapId) {
-            if (!confirm('Are you sure you want to accept this swap? You must meet at the location.')) return;
-
-            try {
-                const response = await fetch('/api/swaps/acceptSwap/' + swapId, {
-                    method: 'POST'
-                });
-
-                if (response.ok) {
-                    showToast('Swap matched! Proceed to the location to exchange.', '🎉');
-                    loadAllData(); // Reload both lists and stats
-                } else {
-                    const data = await response.json();
-                    alert(data.error || 'Failed to accept swap.');
-                }
-            } catch (err) {
-                console.error(err);
-                alert('An error occurred.');
-            }
-        }
 
         // Complete Swap
         window.completeSwap = async function (swapId) {

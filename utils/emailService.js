@@ -185,7 +185,7 @@ async function sendSwapCompletedEmail(toEmail, partnerName, amount) {
     const t = await getTransporter();
 
     const content = `
-        < p > Your swap with <strong>${partnerName}</strong> for <strong>₹${amount}</strong> has been successfully marked as completed!</p >
+        <p>Your swap of <strong>₹${amount}</strong> with <strong>${partnerName}</strong> has been successfully completed.</p>
         <p>Thank you for using SwapPay. Helping peers exchange money securely makes the whole campus experience better.</p>
         <div style="text-align: center; margin: 30px 0;">
             <p><strong>How was your experience?</strong></p>

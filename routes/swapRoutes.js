@@ -19,7 +19,6 @@ router.use(requireAuthAPI);
 
 // POST requests
 router.post('/createSwap', swapController.createSwap);
-router.post('/acceptSwap/:id', swapController.acceptSwap);
 router.post('/completeSwap/:id', swapController.completeSwap);
 router.post('/rateSwap/:id', swapController.rateSwap);
 
