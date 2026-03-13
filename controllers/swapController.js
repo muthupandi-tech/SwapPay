@@ -1,4 +1,5 @@
 const mysql = require('mysql2');
+const geo = require('../utils/geo');
 const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail } = require('../utils/emailService');
 
 // Database connection using the configured details
@@ -29,6 +30,10 @@ exports.createSwap = async (req, res) => {
 
     if (type !== 'need_cash' && type !== 'need_upi') {
         return res.status(400).json({ error: 'Invalid swap type.' });
+    }
+
+    if (!geo.isInsideCampus(lat, lng)) {
+        return res.status(403).json({ error: 'Swaps can only be created within the 1500m campus radius.' });
     }
 
     try {
@@ -254,10 +259,8 @@ exports.createSwap = async (req, res) => {
     }
 };
 
-const geo = require('../utils/geo');
-
-// Get all open swap requests (excluding the current user's own requests)
-exports.getOpenSwaps = async (req, res) => {
+// Get all nearby swap requests
+exports.getNearbySwaps = async (req, res) => {
     const userId = req.session.userId;
 
     if (!userId) {
@@ -265,10 +268,15 @@ exports.getOpenSwaps = async (req, res) => {
     }
 
     try {
-        // First get the user's location to calculate distance
-        const [userRows] = await promisePool.execute('SELECT lat, lng FROM users WHERE id = ?', [userId]);
-        const userLat = userRows[0]?.lat;
-        const userLng = userRows[0]?.lng;
+        let userLat = parseFloat(req.query.lat);
+        let userLng = parseFloat(req.query.lng);
+
+        if (isNaN(userLat) || isNaN(userLng)) {
+            // First get the user's location to calculate distance
+            const [userRows] = await promisePool.execute('SELECT lat, lng FROM users WHERE id = ?', [userId]);
+            userLat = userRows[0]?.lat;
+            userLng = userRows[0]?.lng;
+        }
 
         // Note: If user hasn't set location, they shouldn't even see the swaps
         // But we'll return an empty array or handle error gently

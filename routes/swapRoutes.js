@@ -23,7 +23,7 @@ router.post('/completeSwap/:id', swapController.completeSwap);
 router.post('/rateSwap/:id', swapController.rateSwap);
 
 // GET requests
-router.get('/swaps', swapController.getOpenSwaps);
+router.get('/nearby', swapController.getNearbySwaps);
 router.get('/stats', swapController.getDashboardStats);
 router.get('/mySwaps', swapController.getMySwaps);
 router.get('/notifications', swapController.getNotifications);

@@ -1085,6 +1085,9 @@
         const CAMPUS_CENTER_LNG = 77.95508250232707;
         const ALLOWED_RADIUS_KM = 1.5;
 
+        let currentLat = null;
+        let currentLng = null;
+
         // Haversine formula
         function getDistanceInKm(lat1, lon1, lat2, lon2) {
             const R = 6371; // Radius of the earth in km
@@ -1193,7 +1196,9 @@
                 location: document.getElementById('location').value,
                 allow_partial_match: document.getElementById('allowPartial').checked,
                 allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
-                auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked
+                auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked,
+                lat: currentLat,
+                lng: currentLng
             };
 
             try {
@@ -1420,11 +1425,16 @@
 
             // Format distance if available
             let distanceHtml = '';
+            let badgeHtml = '';
             if (!isMyContext && swap.distanceKm !== undefined) {
                 // Formatting to meters if < 1km, else km
                 const distNum = parseFloat(swap.distanceKm);
-                let distStr = distNum < 1 ? Math.round(distNum * 1000) + 'm away' : distNum.toFixed(1) + 'km away';
-                distanceHtml = `<span style="margin-left: 10px; font-size: 0.85rem; color: #f1c40f; background: rgba(241, 196, 15, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(241, 196, 15, 0.3);">📍 ${distStr}</span>`;
+                const distMeters = Math.round(distNum * 1000);
+                distanceHtml = `<span style="margin-left: 10px; font-size: 0.85rem; color: #f1c40f; background: rgba(241, 196, 15, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(241, 196, 15, 0.3);">📍 ${distMeters}m away</span>`;
+
+                let distBadgeText = distMeters < 100 ? 'Very Close (<100m)' : 'Nearby';
+                let distBadgeColor = distMeters < 100 ? '#2ecc71' : '#3498db';
+                badgeHtml = `<span style="margin-left: 10px; font-size: 0.75rem; color: ${distBadgeColor}; background: ${distBadgeColor}22; padding: 2px 8px; border-radius: 12px; border: 1px solid ${distBadgeColor}55;">${distBadgeText}</span>`;
             }
 
             return ` 
@@ -1432,7 +1442,7 @@
                 <div class="swap-card-header" > 
                     <div> 
                         <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;" >${headerName} ${headerName !== 'You' ? ratingBadge : ''}</h3> 
-                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>${distanceHtml} 
+                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>${distanceHtml}${badgeHtml}
                     </div> 
                     <div style="text-align: right;" > 
                         <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary)" >₹${swap.amount}</div> 
@@ -1540,14 +1550,18 @@
             const container = document.getElementById('swapsContainer');
 
             try {
-                const response = await fetch('/api/swaps/swaps');
+                const url = (currentLat && currentLng) 
+                    ? `/api/swaps/nearby?lat=${currentLat}&lng=${currentLng}` 
+                    : '/api/swaps/nearby';
+
+                const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch');
 
                 const swaps = await response.json();
                 container.innerHTML = '';
 
                 if (swaps.length === 0) {
-                    container.innerHTML = '<p style="color: var(--text-secondary);">No active swaps found nearby. Be the first to request one!</p>';
+                    container.innerHTML = '<p style="color: var(--text-secondary);">No swaps available nearby yet.</p>';
                     return;
                 }
 
@@ -1916,6 +1930,9 @@
                     const data = await res.json();
                     if (!data.user.campus_name) {
                         openLocationModal();
+                    } else {
+                        currentLat = data.user.lat;
+                        currentLng = data.user.lng;
                     }
                 }
             } catch (err) {
@@ -1959,6 +1976,8 @@
                     console.log('Coordinates received');
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
+                    currentLat = lat;
+                    currentLng = lng;
 
                     document.getElementById('locationMap').style.display = 'block';
 
