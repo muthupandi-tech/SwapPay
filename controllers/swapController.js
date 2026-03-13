@@ -16,15 +16,15 @@ const promisePool = pool.promise();
 
 // Create a new swap request
 exports.createSwap = async (req, res) => {
-    const { type, amount, location } = req.body;
+    const { type, amount, location, lat, lng } = req.body;
     const userId = req.session.userId;
 
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized. Please log in.' });
     }
 
-    if (!type || !amount || !location) {
-        return res.status(400).json({ error: 'Type, amount, and location are required.' });
+    if (!type || !amount || !location || lat === undefined || lng === undefined) {
+        return res.status(400).json({ error: 'Type, amount, location, latitude, and longitude are required.' });
     }
 
     if (type !== 'need_cash' && type !== 'need_upi') {
@@ -38,8 +38,8 @@ exports.createSwap = async (req, res) => {
         const parsedAmount = parseFloat(amount);
 
         // 1. Insert the PARENT swap request initially
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, lat, lng, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, lat, lng, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
         const newParentSwapId = result.insertId;
 
         const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
@@ -154,10 +154,10 @@ exports.createSwap = async (req, res) => {
 
                 // Create CHILD SWAP representing the exact match chunk
                 const [childResult] = await promisePool.execute(`
-                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, lat, lng, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
                 `, [
-                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id
+                    userId, type, chunkAmount, chunkAmount, 0, location, lat, lng, 'matched', candidate.user_id, newParentSwapId, candidate.id
                 ]);
 
                 matchedChunks.push({
@@ -254,6 +254,8 @@ exports.createSwap = async (req, res) => {
     }
 };
 
+const geo = require('../utils/geo');
+
 // Get all open swap requests (excluding the current user's own requests)
 exports.getOpenSwaps = async (req, res) => {
     const userId = req.session.userId;
@@ -263,9 +265,20 @@ exports.getOpenSwaps = async (req, res) => {
     }
 
     try {
+        // First get the user's location to calculate distance
+        const [userRows] = await promisePool.execute('SELECT lat, lng FROM users WHERE id = ?', [userId]);
+        const userLat = userRows[0]?.lat;
+        const userLng = userRows[0]?.lng;
+
+        // Note: If user hasn't set location, they shouldn't even see the swaps
+        // But we'll return an empty array or handle error gently
+        if (!userLat || !userLng) {
+            return res.status(200).json([]); // Frontend will be showing location permission modal anyway
+        }
+
         // Fetch open swaps and join with users table to get the requester's name AND average rating
         const query = `
-            SELECT s.id, s.type, s.amount, s.location, s.created_at, u.name as requester_name,
+            SELECT s.id, s.type, s.amount, s.location, s.lat, s.lng, s.created_at, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
@@ -274,7 +287,25 @@ exports.getOpenSwaps = async (req, res) => {
         `;
         const [rows] = await promisePool.execute(query, [userId]);
 
-        res.status(200).json(rows);
+        // Filter and map to include distance
+        const enhancedRows = [];
+        for (const swap of rows) {
+            if (swap.lat && swap.lng) {
+                const distanceKm = geo.getDistanceInKm(userLat, userLng, swap.lat, swap.lng);
+                // Also verify swap is strictly within campus radius
+                if (geo.isInsideCampus(swap.lat, swap.lng)) {
+                    enhancedRows.push({
+                        ...swap,
+                        distanceKm: distanceKm.toFixed(2) // Format to 2 decimal places
+                    });
+                }
+            }
+        }
+
+        // Sort by closest distance
+        enhancedRows.sort((a, b) => parseFloat(a.distanceKm) - parseFloat(b.distanceKm));
+
+        res.status(200).json(enhancedRows);
     } catch (error) {
         console.error('Error fetching swaps:', error);
         res.status(500).json({ error: 'An error occurred while fetching swaps.' });
@@ -293,7 +324,7 @@ exports.completeSwap = async (req, res) => {
     }
 
     try {
-        const checkQuery = 'SELECT status, user_id, matched_user_id, creator_completed, acceptor_completed, amount FROM swaps WHERE id = ?';
+        const checkQuery = 'SELECT status, user_id, matched_user_id, creator_completed, acceptor_completed, amount, parent_swap_id, matched_parent_swap_id FROM swaps WHERE id = ?';
         const [rows] = await promisePool.execute(checkQuery, [swapId]);
 
         if (rows.length === 0) {
@@ -370,6 +401,21 @@ exports.completeSwap = async (req, res) => {
                 }
             } catch (e) {
                 console.error('Error sending completion emails:', e);
+            }
+
+            // Propagate completion to parent swaps (Crowd-Swap containers)
+            const parentIds = [swap.parent_swap_id, swap.matched_parent_swap_id].filter(id => id != null);
+            for (const pid of parentIds) {
+                const [pRows] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [pid]);
+                if (pRows.length > 0 && parseFloat(pRows[0].remaining_amount) === 0) {
+                    const [cRows] = await promisePool.execute(
+                        'SELECT id FROM swaps WHERE (parent_swap_id = ? OR matched_parent_swap_id = ?) AND status != "completed"',
+                        [pid, pid]
+                    );
+                    if (cRows.length === 0) {
+                        await promisePool.execute('UPDATE swaps SET status = "completed" WHERE id = ?', [pid]);
+                    }
+                }
             }
 
             return res.status(200).json({ message: 'Swap marked as completed by both parties.' });

@@ -66,7 +66,11 @@ app.use('/api/swaps', swapRoutes);
 // Use the admin routes for API calls
 const adminRoutes = require('./routes/adminRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const userRoutes = require('./routes/userRoutes');
+
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/user', userRoutes);
+
 const requireAdminAPI = (req, res, next) => {
     if (req.session && req.session.userId && req.session.role === 'admin') {
         return next();
@@ -122,6 +126,11 @@ app.get('/register', (req, res) => {
 // Protected Route for Dashboard
 app.get('/dashboard', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
+});
+
+// Protected Route for Profile
+app.get('/profile', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'profile.html'));
 });
 
 // Protected Route for Admin Dashboard

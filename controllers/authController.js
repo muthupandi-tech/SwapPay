@@ -99,3 +99,44 @@ exports.logoutUser = (req, res) => {
         res.redirect('/');
     });
 };
+
+exports.getCurrentUser = async (req, res) => {
+    if (req.session && req.session.userId) {
+        try {
+            const mysql = require('mysql2/promise');
+            const pool = mysql.createPool({
+                host: 'localhost',
+                user: 'root',
+                password: 'mysqlpandi',
+                database: 'swappay',
+                waitForConnections: true,
+                connectionLimit: 10,
+                queueLimit: 0
+            });
+            const [rows] = await pool.execute('SELECT campus_name, block_name FROM users WHERE id = ?', [req.session.userId]);
+            pool.end();
+
+            let campus_name = null;
+            let block_name = null;
+
+            if (rows.length > 0) {
+                campus_name = rows[0].campus_name;
+                block_name = rows[0].block_name;
+            }
+
+            return res.json({
+                id: req.session.userId,
+                name: req.session.userName,
+                role: req.session.role,
+                campus_name,
+                block_name
+            });
+        } catch (err) {
+            console.error('Error fetching current user location:', err);
+            // Fallback
+            return res.json({ id: req.session.userId, name: req.session.userName, role: req.session.role, campus_name: null, block_name: null });
+        }
+    } else {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+};

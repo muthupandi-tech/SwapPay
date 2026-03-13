@@ -1,0 +1,7 @@
+[dotenv@17.3.1] injecting env (2) from .env -- tip: ⚙️  override existing env vars with { override: true }
+Server is running on http://localhost:3000
+Automated Email Cron Service Initialized.
+--- requireAuthAPI middleware hit for path: /open
+User is NOT authenticated.
+--- requireAuthAPI middleware hit for path: /open
+User is NOT authenticated.

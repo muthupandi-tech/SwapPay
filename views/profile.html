@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwapPay | User Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .profile-container {
+            padding: 3rem 5%;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .profile-header h1 {
+            font-size: 2.5rem;
+        }
+
+        .profile-header h1 span {
+            color: var(--accent-secondary);
+        }
+
+        .btn-edit {
+            padding: 0.8rem 2rem;
+            border-radius: 50px;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            border: none;
+            color: white;
+            font-weight: 800;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .btn-edit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(108, 92, 231, 0.4);
+        }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .profile-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.5rem;
+            display: inline-block;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .info-value {
+            color: var(--text-primary);
+            font-weight: 800;
+            text-align: right;
+            max-width: 60%;
+            word-wrap: break-word;
+        }
+
+        .stat-highlight {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--accent-secondary);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            text-align: center;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .feedback-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feedback-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .feedback-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .feedback-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .feedback-stars {
+            color: #ff9f43;
+            letter-spacing: 2px;
+            font-size: 1.1rem;
+        }
+
+        .feedback-date {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .feedback-rater {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            font-weight: bold;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.8rem;
+        }
+
+        .modal-header h2 span {
+            color: var(--accent-secondary);
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            color: white;
+            font-weight: 800;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+            border: 1px solid var(--accent-secondary);
+            border-left: 4px solid var(--accent-secondary);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            color: var(--text-primary);
+            padding: 15px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            min-width: 250px;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            font-size: 1.5rem;
+        }
+
+        .toast-message {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <nav class="navbar">
+        <div class="logo">Swap<span>Pay</span></div>
+        <ul class="nav-links" style="display: flex; align-items: center;">
+            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Back
+                    to Dashboard</a></li>
+        </ul>
+    </nav>
+
+    <main class="profile-container">
+        <div class="profile-header">
+            <h1>Your <span>Profile</span></h1>
+            <button class="btn-edit" onclick="openEditModal()">Edit Profile</button>
+        </div>
+
+        <div class="profile-grid">
+            <!-- Left Column: Personal Info -->
+            <div class="card">
+                <h2>Personal Details</h2>
+                <div class="info-row">
+                    <span class="info-label">Full Name</span>
+                    <span class="info-value" id="profileName">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email Address</span>
+                    <span class="info-value" id="profileEmail">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Phone Number</span>
+                    <span class="info-value" id="profilePhone">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">College Name</span>
+                    <span class="info-value" id="profileCollege">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Campus Location</span>
+                    <span class="info-value" id="profileCampus">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Hostel / Block</span>
+                    <span class="info-value" id="profileBlock">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Member Since</span>
+                    <span class="info-value" id="profileJoined">-</span>
+                </div>
+            </div>
+
+            <!-- Right Column: Stats & Feedback -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+
+                <div class="card" style="display: flex; gap: 2rem; justify-content: space-around; padding: 2rem;">
+                    <div>
+                        <div class="stat-highlight" id="statTrust">0%</div>
+                        <div class="stat-label">Trust Score</div>
+                    </div>
+                    <div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
+                    <div>
+                        <div class="stat-highlight" id="statSwaps" style="color: #00cec9;">0</div>
+                        <div class="stat-label">Total Swaps</div>
+                    </div>
+                </div>
+
+                <div class="card" style="padding: 1.5rem;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="margin: 0; font-size: 1.2rem; border: none; padding: 0;">Verified Campus Location
+                        </h2>
+                        <span id="campusModeBadge"
+                            style="display: none; background: rgba(46, 204, 113, 0.1); color: #2ecc71; padding: 0.3rem 0.6rem; border-radius: 20px; font-weight: 600; font-size: 0.8rem; border: 1px solid rgba(46, 204, 113, 0.3);">Active
+                            ✅</span>
+                        <span id="campusModeOffline"
+                            style="display: none; background: rgba(231, 76, 60, 0.1); color: #e74c3c; padding: 0.3rem 0.6rem; border-radius: 20px; font-weight: 600; font-size: 0.8rem; border: 1px solid rgba(231, 76, 60, 0.3);">Outside
+                            Bounds</span>
+                    </div>
+                    <div id="profileMap"
+                        style="height: 200px; width: 100%; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2);">
+                    </div>
+                    <p id="mapStatusText"
+                        style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem; text-align: center;">
+                        Locating...</p>
+                </div>
+
+                <div class="card">
+                    <h2>Recent Feedback</h2>
+                    <ul class="feedback-list" id="feedbackList">
+                        <li>
+                            <p style="color: var(--text-secondary); text-align: center;">Loading feedback...</p>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Profile Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit <span>Profile</span></h2>
+                <button class="btn-close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="editProfileForm">
+                <div class="form-group">
+                    <label for="editName">Full Name</label>
+                    <input type="text" id="editName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="editPhone">Phone Number</label>
+                    <input type="text" id="editPhone" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCollege">College Name</label>
+                    <input type="text" id="editCollege" class="form-control" required>
+                </div>
+                <button type="submit" id="submitEditBtn" class="btn-submit">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // Toast Helper
+        function showToast(message, icon = '✅') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-message">${message}</div>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400);
+            }, 4000);
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('editModal');
+        function openEditModal() {
+            modal.classList.add('active');
+        }
+        function closeEditModal() {
+            modal.classList.remove('active');
+        }
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                closeEditModal();
+            }
+        }
+
+        function renderStars(rating) {
+            let stars = '';
+            for (let i = 1; i <= 5; i++) {
+                stars += i <= rating ? '★' : '☆';
+            }
+            return stars;
+        }
+
+        // Load Profile Data
+        async function loadProfile() {
+            try {
+                const response = await fetch('/api/user/profile');
+                if (!response.ok) {
+                    if (response.status === 401) window.location.href = '/login';
+                    throw new Error('Failed to fetch profile');
+                }
+                const data = await response.json();
+
+                // Populate Profile Details
+                document.getElementById('profileName').textContent = data.user.name;
+                document.getElementById('profileEmail').textContent = data.user.email;
+                document.getElementById('profilePhone').textContent = data.user.phone;
+                document.getElementById('profileCollege').textContent = data.user.college;
+
+                // Location Details
+                document.getElementById('profileCampus').textContent = data.user.campus_name || 'Not Set';
+                document.getElementById('profileBlock').textContent = data.user.block_name || 'Not Set';
+
+                document.getElementById('profileJoined').textContent = new Date(data.user.created_at).toLocaleDateString();
+
+                // Populate Stats
+                document.getElementById('statTrust').textContent = data.stats.trustScore;
+                document.getElementById('statSwaps').textContent = data.stats.totalSwapsCompleted;
+
+                // Populate Edit Form
+                document.getElementById('editName').value = data.user.name;
+                document.getElementById('editPhone').value = data.user.phone;
+                document.getElementById('editCollege').value = data.user.college;
+
+                // Populate Location Details
+                document.getElementById('profileCampus').textContent = data.user.campus_name || 'Not Set';
+                document.getElementById('profileBlock').textContent = data.user.block_name || 'Not Set';
+
+                // Auto-detect Live Location for Map
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        initProfileMap(position.coords.latitude, position.coords.longitude);
+                    }, (err) => {
+                        console.warn("Geolocation failed on profile, falling back to DB:", err);
+                        initProfileMap(data.user.lat, data.user.lng);
+                    }, { enableHighAccuracy: true });
+                } else {
+                    // Fallback to DB location
+                    initProfileMap(data.user.lat, data.user.lng);
+                }
+
+                // Populate Feedback
+                const feedbackList = document.getElementById('feedbackList');
+                if (data.recentRatings.length === 0) {
+                    feedbackList.innerHTML = '<li><p style="color: var(--text-secondary); text-align: center;">No feedback received yet.</p></li>';
+                } else {
+                    feedbackList.innerHTML = data.recentRatings.map(r => `
+                        <li class="feedback-item">
+                            <div class="feedback-header">
+                                <span class="feedback-stars">${renderStars(r.stars)}</span>
+                                <span class="feedback-date">${new Date(r.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <div class="feedback-rater">From: ${r.rater_name}</div>
+                        </li>
+                    `).join('');
+                }
+
+            } catch (e) {
+                console.error(e);
+                showToast('Failed to load profile data', '❌');
+            }
+        }
+
+        // Handle Form Submit
+        document.getElementById('editProfileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitEditBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            const payload = {
+                name: document.getElementById('editName').value,
+                phone: document.getElementById('editPhone').value,
+                college: document.getElementById('editCollege').value
+            };
+
+            try {
+                const response = await fetch('/api/user/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    showToast('Profile updated successfully!');
+                    closeEditModal();
+                    loadProfile(); // reload data
+                } else {
+                    const data = await response.json();
+                    showToast(data.error || 'Failed to update profile', '❌');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('An error occurred', '❌');
+            } finally {
+                btn.disabled = false;
+                btn.disabled = false;
+                btn.textContent = 'Save Changes';
+            }
+        });
+
+        // Live Profile Map Logic
+        let profileMap = null;
+        let profileMarker = null;
+
+        const CAMPUS_CENTER_LAT = 10.95698918766332;
+        const CAMPUS_CENTER_LNG = 77.95508250232707;
+        const ALLOWED_RADIUS_KM = 1.5;
+
+        // Haversine formula
+        function getDistanceInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function initProfileMap(lat, lng) {
+            const statusText = document.getElementById('mapStatusText');
+            const badgeActive = document.getElementById('campusModeBadge');
+            const badgeOffline = document.getElementById('campusModeOffline');
+
+            if (!profileMap) {
+                profileMap = L.map('profileMap').setView([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], 14);
+                // Use Standard bright OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(profileMap);
+
+                // Draw static campus boundary
+                L.circle([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], {
+                    color: '#3498db',
+                    fillColor: '#3498db',
+                    fillOpacity: 0.1,
+                    radius: ALLOWED_RADIUS_KM * 1000
+                }).addTo(profileMap);
+            }
+
+            if (lat && lng) {
+                // We have user coordinates
+                if (profileMarker) profileMap.removeLayer(profileMarker);
+
+                profileMarker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: "#e74c3c",
+                    color: "#fff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(profileMap);
+
+                profileMap.setView([lat, lng], 15);
+
+                const dist = getDistanceInKm(lat, lng, CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG);
+                if (dist <= ALLOWED_RADIUS_KM) {
+                    badgeActive.style.display = 'inline-block';
+                    badgeOffline.style.display = 'none';
+                    statusText.textContent = "Live map showing your verified position inside campus.";
+                } else {
+                    badgeOffline.style.display = 'inline-block';
+                    badgeActive.style.display = 'none';
+                    statusText.textContent = "You are currently outside the campus bounds.";
+                }
+            } else {
+                // No coordinates found
+                statusText.textContent = "Location not available. Please allow browser location access in the dashboard.";
+            }
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', loadProfile);
+
+    </script>
+</body>
+
+</html>

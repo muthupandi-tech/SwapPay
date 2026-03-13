@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwapPay | Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .dashboard-container {
@@ -794,6 +798,83 @@
             font-weight: 500;
             font-size: 0.95rem;
         }
+
+        /* Profile Dropdown Styles */
+        .user-profile-container {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .profile-avatar {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: white;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .user-profile-container:hover .profile-avatar {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(108, 92, 231, 0.5);
+        }
+
+        .profile-dropdown {
+            position: absolute;
+            top: 130%;
+            right: 0;
+            width: 200px;
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .profile-dropdown.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .profile-dropdown-item {
+            display: block;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s, padding-left 0.2s;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .profile-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .profile-dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            padding-left: 1.8rem;
+        }
+
+        .profile-dropdown-item.text-danger {
+            color: #ff6b6b;
+        }
+
+        .profile-dropdown-item.text-danger:hover {
+            background: rgba(255, 107, 107, 0.1);
+        }
     </style>
 </head>
 
@@ -817,13 +898,21 @@
             <li id="adminNavBtn" style="display: none;"><a href="/admin"
                     style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin
                     Panel</a></li>
-            <li><span style="color: var(--text-secondary); font-weight: 600;">Campus Mode Active</span></li>
+            <li><span id="campusBadge"
+                    style="display: none; background: rgba(46, 204, 113, 0.1); color: #2ecc71; padding: 0.4rem 0.8rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; border: 1px solid rgba(46, 204, 113, 0.3);">Campus
+                    Mode Active ✅</span></li>
         </ul>
     </nav>
     <main class="dashboard-container">
         <div class="dashboard-header">
             <h1>Welcome to your <span>Dashboard</span></h1>
-            <a href="/api/auth/logout" class="btn-logout">Logout</a>
+            <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
+                <div class="profile-avatar">👤</div>
+                <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
+                    <a href="/profile" class="profile-dropdown-item">View Profile</a>
+                    <a href="/api/auth/logout" class="profile-dropdown-item text-danger">Logout</a>
+                </div>
+            </div>
         </div>
         <div class="dashboard-stats">
             <div class="stat-card">
@@ -961,6 +1050,29 @@
         </div>
     </div>
 
+    <!-- Campus Location Selection Modal -->
+    <div class="modal-overlay" id="locationModal" style="z-index: 2000;">
+        <div class="modal-content" style="max-width: 600px; text-align: center;">
+            <div class="modal-header" style="justify-content: center;">
+                <h2>Verify <span>Campus Location</span></h2>
+                <!-- No close button intentionally (forced on login if missing) -->
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">SwapPay requires live location verify that
+                you are within the campus boundary in order to create and view swap requests.</p>
+
+            <div id="locationMap"
+                style="height: 250px; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid var(--glass-border); z-index: 1; display: none;">
+            </div>
+
+            <div id="geoStatus" style="margin-bottom: 1.5rem; font-weight: 600; color: #f1c40f;">
+                Awaiting Location Permission...
+            </div>
+
+            <button type="button" id="verifyLocationBtn" class="btn-submit" onclick="requestGeolocation()">Give Location
+                Access</button>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
@@ -968,6 +1080,23 @@
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
+        // Global Campus Geo-Fencing Constants
+        const CAMPUS_CENTER_LAT = 10.95698918766332;
+        const CAMPUS_CENTER_LNG = 77.95508250232707;
+        const ALLOWED_RADIUS_KM = 1.5;
+
+        // Haversine formula
+        function getDistanceInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
         let currentUserId = null;
         let socket = null;
 
@@ -1031,12 +1160,23 @@
             ratingForm.reset();
         }
 
+        function toggleProfileDropdown(event) {
+            event.stopPropagation();
+            const dropdown = document.getElementById('profileDropdown');
+            if (dropdown) dropdown.classList.toggle('active');
+        }
+
         window.onclick = function (event) {
             if (event.target == modal) {
                 closeModal();
             }
             if (event.target == ratingModal) {
                 closeRatingModal();
+            }
+            // Close profile dropdown if clicked outside
+            const profileDropdown = document.getElementById('profileDropdown');
+            if (profileDropdown && profileDropdown.classList.contains('active')) {
+                profileDropdown.classList.remove('active');
             }
         }
 
@@ -1278,12 +1418,21 @@
 
             const headerName = isMyContext ? (swap.isCreator ? 'You' : swap.otherPartyName) : swap.requester_name;
 
+            // Format distance if available
+            let distanceHtml = '';
+            if (!isMyContext && swap.distanceKm !== undefined) {
+                // Formatting to meters if < 1km, else km
+                const distNum = parseFloat(swap.distanceKm);
+                let distStr = distNum < 1 ? Math.round(distNum * 1000) + 'm away' : distNum.toFixed(1) + 'km away';
+                distanceHtml = `<span style="margin-left: 10px; font-size: 0.85rem; color: #f1c40f; background: rgba(241, 196, 15, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(241, 196, 15, 0.3);">📍 ${distStr}</span>`;
+            }
+
             return ` 
             <div class="swap-card ${statusClass}" > 
                 <div class="swap-card-header" > 
                     <div> 
                         <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;" >${headerName} ${headerName !== 'You' ? ratingBadge : ''}</h3> 
-                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span> 
+                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>${distanceHtml} 
                     </div> 
                     <div style="text-align: right;" > 
                         <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary)" >₹${swap.amount}</div> 
@@ -1427,7 +1576,7 @@
             updateSelectionMath();
 
             try {
-                const response = await fetch(`/api/swaps/availablePartners/${swapId}`);
+                const response = await fetch(`/ api / swaps / availablePartners / ${swapId} `);
                 if (!response.ok) throw new Error('Failed to fetch partners');
                 activeCandidatePartners = await response.json();
 
@@ -1437,9 +1586,9 @@
                 }
 
                 listContainer.innerHTML = activeCandidatePartners.map(p => {
-                    const ratingStr = p.partner_rating ? `⭐${parseFloat(p.partner_rating).toFixed(1)}` : 'New';
+                    const ratingStr = p.partner_rating ? `⭐${parseFloat(p.partner_rating).toFixed(1)} ` : 'New';
                     return `
-                        <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    < div style = "background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;" >
                             <div>
                                 <h4 style="margin: 0 0 5px 0; color: var(--text-primary);">${p.partner_name} <span style="font-size: 0.8rem; color: var(--accent-secondary); margin-left: 5px;">${ratingStr}</span></h4>
                                 <div style="font-size: 0.9rem; color: var(--text-secondary);">
@@ -1450,7 +1599,7 @@
                             <div>
                                 <input type="checkbox" class="partner-checkbox" data-id="${p.id}" data-amount="${p.amount}" onchange="updateSelectionMath()" style="width: 20px; height: 20px; accent-color: var(--accent-primary); cursor: pointer;">
                             </div>
-                        </div>
+                        </div >
                     `;
                 }).join('');
 
@@ -1480,7 +1629,7 @@
             const mathDisplay = document.getElementById('partnerSelectionMath');
 
             if (remaining < 0) {
-                mathDisplay.innerHTML = `⚠️ Over-selected by ₹${Math.abs(remaining).toFixed(2)}!`;
+                mathDisplay.innerHTML = `⚠️ Over - selected by ₹${Math.abs(remaining).toFixed(2)} !`;
                 mathDisplay.style.color = '#ff6b6b';
                 mathDisplay.parentElement.style.borderColor = '#ff6b6b';
                 mathDisplay.parentElement.style.background = 'rgba(255, 107, 107, 0.1)';
@@ -1597,7 +1746,7 @@
                 if (data.type === 'rating') icon = '⭐';
                 if (data.type === 'admin') icon = '⚠️';
 
-                showToast(`<strong>${data.title}</strong><br>${data.message}`, icon);
+                showToast(`< strong > ${data.title}</strong > <br>${data.message}`, icon);
 
                 // Play Sound
                 playNotificationSound();
@@ -1695,7 +1844,7 @@
                     <div style="padding: 1rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.05);">
                         <button onclick="clearAllNotifications(event)" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 0.9rem; font-weight: 600;">Clear All</button>
                     </div>
-                `;
+                    `;
             }
 
             if (unreadCount > 0) {
@@ -1744,7 +1893,180 @@
         }
 
         // Initial Load
-        document.addEventListener('DOMContentLoaded', loadAllData);
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchCurrentUser(); // Fetch user first
+
+            // Check if campus location needs to be selected
+            await checkLocationStatus();
+
+            loadStats();
+            loadMySwaps();
+            loadSwaps();
+            loadNotifications();
+        });
+
+        // Location Modal Logic
+        let locationMap = null;
+        let locationMarker = null;
+
+        async function checkLocationStatus() {
+            try {
+                const res = await fetch('/api/user/profile');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!data.user.campus_name) {
+                        openLocationModal();
+                    }
+                }
+            } catch (err) {
+                console.error('Error checking location status:', err);
+            }
+        }
+
+        function openLocationModal() {
+            document.getElementById('locationModal').classList.add('active');
+            // Do not initialize map here! Wait for GPS permission.
+        }
+
+        function closeLocationModal() {
+            document.getElementById('locationModal').classList.remove('active');
+        }
+
+        async function requestGeolocation() {
+            console.log('Requesting GPS permission');
+            const statusDiv = document.getElementById('geoStatus');
+            const btn = document.getElementById('verifyLocationBtn');
+
+            if (!navigator.geolocation) {
+                statusDiv.innerHTML = "Geolocation is not supported by your browser";
+                statusDiv.style.color = "#e74c3c";
+                return;
+            }
+
+            // Must use HTTPS or localhost for geolocation
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                statusDiv.innerHTML = "Secure connection (HTTPS) required for geolocation.";
+                statusDiv.style.color = "#e74c3c";
+                return;
+            }
+
+            statusDiv.innerHTML = '<span class="spinner" style="display:inline-block; width:15px; height:15px; border:2px solid #f1c40f; border-top:2px solid transparent; border-radius:50%; animation:spin 1s linear infinite;"></span> Locating...';
+            statusDiv.style.color = "#f1c40f";
+            btn.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    console.log('Coordinates received');
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    document.getElementById('locationMap').style.display = 'block';
+
+                    // Initialize Map NOW
+                    if (!locationMap) {
+                        locationMap = L.map('locationMap').setView([lat, lng], 16);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; OpenStreetMap contributors',
+                            maxZoom: 19
+                        }).addTo(locationMap);
+
+                        // Draw static campus boundary
+                        L.circle([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], {
+                            color: '#3498db',
+                            fillColor: '#3498db',
+                            fillOpacity: 0.1,
+                            radius: ALLOWED_RADIUS_KM * 1000 // Convert km to meters
+                        }).addTo(locationMap);
+                    }
+
+                    // Update UI Map
+                    if (locationMarker) locationMap.removeLayer(locationMarker);
+
+                    // Create a pulsating blue dot (custom CSS logic simplified with standard marker)
+                    locationMarker = L.circleMarker([lat, lng], {
+                        radius: 8,
+                        fillColor: "#e74c3c",
+                        color: "#fff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(locationMap);
+
+                    locationMap.setView([lat, lng], 16);
+                    locationMap.invalidateSize(); // Ensure it renders properly after unhiding or creating
+
+                    const dist = getDistanceInKm(lat, lng, CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG);
+                    if (dist > ALLOWED_RADIUS_KM) {
+                        statusDiv.innerHTML = "You are outside the campus area. Swaps disabled.";
+                        statusDiv.style.color = "#e74c3c";
+                        btn.disabled = false;
+                        btn.textContent = "Retry Location";
+                        const campusBadge = document.getElementById('campusBadge');
+                        if (campusBadge) campusBadge.style.display = 'none';
+
+                        // Disable Quick Action buttons
+                        document.querySelectorAll('.actions-panel .action-card').forEach(card => {
+                            card.style.opacity = '0.5';
+                            card.style.pointerEvents = 'none';
+                        });
+
+                    } else {
+                        statusDiv.innerHTML = "Campus Verified ✅ Saving...";
+                        statusDiv.style.color = "#2ecc71";
+                        const campusBadge = document.getElementById('campusBadge');
+                        if (campusBadge) campusBadge.style.display = 'inline-block';
+
+                        // Enable Quick Action buttons
+                        document.querySelectorAll('.actions-panel .action-card').forEach(card => {
+                            card.style.opacity = '1';
+                            card.style.pointerEvents = 'auto';
+                        });
+
+                        // Proceed to backend save
+                        await saveGeoLocationToBackend(lat, lng);
+                    }
+                },
+                (error) => {
+                    console.log('Location error', error);
+                    let errorMsg = "Unable to retrieve your location";
+                    if (error.code === error.TIMEOUT) {
+                        errorMsg = "Location timeout. Please enable high accuracy GPS.";
+                    } else if (error.code === error.PERMISSION_DENIED) {
+                        errorMsg = "Location permission denied. Please allow access to use SwapPay.";
+                    }
+                    statusDiv.innerHTML = errorMsg;
+                    statusDiv.style.color = "#e74c3c";
+                    btn.disabled = false;
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        async function saveGeoLocationToBackend(lat, lng) {
+            try {
+                const response = await fetch('/api/user/location', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng })
+                });
+
+                if (response.ok) {
+                    showToast('Campus Location Verified!', '📍');
+                    closeLocationModal();
+                    const campusModeBadge = document.getElementById('campusModeBadge');
+                    if (campusModeBadge) campusModeBadge.style.display = 'inline-block';
+                    loadSwaps(); // reloading swaps as we have location now
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to verify location with server.');
+                    document.getElementById('verifyLocationBtn').disabled = false;
+                }
+            } catch (err) {
+                console.error('Fetch Check Error:', err);
+                alert('An error occurred contacting the server. ' + err.message);
+                document.getElementById('verifyLocationBtn').disabled = false;
+            }
+        }
     </script>
 </body>
 
