@@ -11,12 +11,12 @@ connection.connect((err) => {
     if (err) throw err;
     console.log('Connected to MySQL server.');
 
-    const alterQuery1 = "ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('user', 'admin') DEFAULT 'user'";
-    const alterQuery2 = "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE";
+    const alterQuery1 = "ALTER TABLE users ADD COLUMN role ENUM('user', 'admin') DEFAULT 'user'";
+    const alterQuery2 = "ALTER TABLE users ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE";
 
     // Notification Updates
-    const alterQuery3 = "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT 'Alert'";
-    const alterQuery4 = "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'system'";
+    const alterQuery3 = "ALTER TABLE notifications ADD COLUMN title VARCHAR(255) DEFAULT 'Alert'";
+    const alterQuery4 = "ALTER TABLE notifications ADD COLUMN type VARCHAR(50) DEFAULT 'system'";
 
     connection.query(alterQuery1, (err) => {
         if (err && err.code !== 'ER_DUP_FIELDNAME') console.error(err);

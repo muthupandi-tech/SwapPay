@@ -1,0 +1,1 @@
+id, user_id, type, amount, location, status, created_at, matched_user_id, match_time, creator_completed, acceptor_completed, last_reminder_sent, reminder_count, total_amount, remaining_amount, allow_partial_match, parent_swap_id, matched_parent_swap_id, is_selected, selection_group_id, partner_priority_rank, allow_partner_selection, auto_accept_perfect, lat, lng

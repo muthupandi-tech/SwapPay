@@ -31,6 +31,34 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Chat Room Join
+    socket.on('join_swap_room', (swapId) => {
+        if (swapId) {
+            socket.join(`swap_${swapId}`);
+            console.log(`Socket ${socket.id} joined chat room swap_${swapId}`);
+        }
+    });
+
+    // Real-time Chat Messaging
+    socket.on('send_message', async (data) => {
+        const { swapId, senderId, message } = data;
+        if (!swapId || !senderId || !message) return;
+
+        try {
+            // Validate and save message into database via controller
+            const chatController = require('./controllers/chatController');
+            const savedMessageObject = await chatController.saveMessage(swapId, senderId, message);
+            
+            if (savedMessageObject) {
+                // Broadcast the message back to everyone in the room (including sender to confirm receipt)
+                io.to(`swap_${swapId}`).emit('receive_message', savedMessageObject);
+            }
+        } catch (error) {
+            console.error('Socket send_message error:', error);
+            // Optionally emit an error event back to sender
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
@@ -67,9 +95,11 @@ app.use('/api/swaps', swapRoutes);
 const adminRoutes = require('./routes/adminRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const userRoutes = require('./routes/userRoutes');
+const chatRoutes = require('./routes/chatRoutes'); // Add chat routes
 
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/chat', chatRoutes); // Mount chat API
 
 const requireAdminAPI = (req, res, next) => {
     if (req.session && req.session.userId && req.session.role === 'admin') {

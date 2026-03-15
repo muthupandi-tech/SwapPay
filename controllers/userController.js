@@ -111,8 +111,6 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
-const geo = require('../utils/geo');
-
 exports.updateLocation = async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -125,11 +123,6 @@ exports.updateLocation = async (req, res) => {
 
         if (lat === undefined || lng === undefined) {
             return res.status(400).json({ error: 'Latitude and Longitude are required.' });
-        }
-
-        // Validate Geo-fence
-        if (!geo.isInsideCampus(lat, lng)) {
-            return res.status(403).json({ error: 'Selected location is outside the approved campus boundary.' });
         }
 
         await promisePool.execute(

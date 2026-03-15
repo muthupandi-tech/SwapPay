@@ -6,10 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwapPay | User Profile</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .profile-container {
@@ -375,25 +371,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="padding: 1.5rem;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h2 style="margin: 0; font-size: 1.2rem; border: none; padding: 0;">Verified Campus Location
-                        </h2>
-                        <span id="campusModeBadge"
-                            style="display: none; background: rgba(46, 204, 113, 0.1); color: #2ecc71; padding: 0.3rem 0.6rem; border-radius: 20px; font-weight: 600; font-size: 0.8rem; border: 1px solid rgba(46, 204, 113, 0.3);">Active
-                            ✅</span>
-                        <span id="campusModeOffline"
-                            style="display: none; background: rgba(231, 76, 60, 0.1); color: #e74c3c; padding: 0.3rem 0.6rem; border-radius: 20px; font-weight: 600; font-size: 0.8rem; border: 1px solid rgba(231, 76, 60, 0.3);">Outside
-                            Bounds</span>
-                    </div>
-                    <div id="profileMap"
-                        style="height: 200px; width: 100%; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2);">
-                    </div>
-                    <p id="mapStatusText"
-                        style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem; text-align: center;">
-                        Locating...</p>
-                </div>
+
 
                 <div class="card">
                     <h2>Recent Feedback</h2>
@@ -510,18 +488,7 @@
                 document.getElementById('profileCampus').textContent = data.user.campus_name || 'Not Set';
                 document.getElementById('profileBlock').textContent = data.user.block_name || 'Not Set';
 
-                // Auto-detect Live Location for Map
-                if ("geolocation" in navigator) {
-                    navigator.geolocation.getCurrentPosition((position) => {
-                        initProfileMap(position.coords.latitude, position.coords.longitude);
-                    }, (err) => {
-                        console.warn("Geolocation failed on profile, falling back to DB:", err);
-                        initProfileMap(data.user.lat, data.user.lng);
-                    }, { enableHighAccuracy: true });
-                } else {
-                    // Fallback to DB location
-                    initProfileMap(data.user.lat, data.user.lng);
-                }
+
 
                 // Populate Feedback
                 const feedbackList = document.getElementById('feedbackList');
@@ -583,78 +550,7 @@
             }
         });
 
-        // Live Profile Map Logic
-        let profileMap = null;
-        let profileMarker = null;
 
-        const CAMPUS_CENTER_LAT = 10.95698918766332;
-        const CAMPUS_CENTER_LNG = 77.95508250232707;
-        const ALLOWED_RADIUS_KM = 1.5;
-
-        // Haversine formula
-        function getDistanceInKm(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Radius of the earth in km
-            const dLat = (lat2 - lat1) * (Math.PI / 180);
-            const dLon = (lon2 - lon1) * (Math.PI / 180);
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
-        function initProfileMap(lat, lng) {
-            const statusText = document.getElementById('mapStatusText');
-            const badgeActive = document.getElementById('campusModeBadge');
-            const badgeOffline = document.getElementById('campusModeOffline');
-
-            if (!profileMap) {
-                profileMap = L.map('profileMap').setView([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], 14);
-                // Use Standard bright OpenStreetMap tiles
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors',
-                    maxZoom: 19
-                }).addTo(profileMap);
-
-                // Draw static campus boundary
-                L.circle([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], {
-                    color: '#3498db',
-                    fillColor: '#3498db',
-                    fillOpacity: 0.1,
-                    radius: ALLOWED_RADIUS_KM * 1000
-                }).addTo(profileMap);
-            }
-
-            if (lat && lng) {
-                // We have user coordinates
-                if (profileMarker) profileMap.removeLayer(profileMarker);
-
-                profileMarker = L.circleMarker([lat, lng], {
-                    radius: 8,
-                    fillColor: "#e74c3c",
-                    color: "#fff",
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.8
-                }).addTo(profileMap);
-
-                profileMap.setView([lat, lng], 15);
-
-                const dist = getDistanceInKm(lat, lng, CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG);
-                if (dist <= ALLOWED_RADIUS_KM) {
-                    badgeActive.style.display = 'inline-block';
-                    badgeOffline.style.display = 'none';
-                    statusText.textContent = "Live map showing your verified position inside campus.";
-                } else {
-                    badgeOffline.style.display = 'inline-block';
-                    badgeActive.style.display = 'none';
-                    statusText.textContent = "You are currently outside the campus bounds.";
-                }
-            } else {
-                // No coordinates found
-                statusText.textContent = "Location not available. Please allow browser location access in the dashboard.";
-            }
-        }
 
         // Init
         document.addEventListener('DOMContentLoaded', loadProfile);

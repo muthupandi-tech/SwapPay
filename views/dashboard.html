@@ -6,10 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwapPay | Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .dashboard-container {
@@ -526,6 +522,111 @@
             color: #00cec9;
         }
 
+        /* Chat Modal & UI Styles */
+        .chat-modal-content {
+            display: flex;
+            flex-direction: column;
+            height: 70vh;
+            max-height: 600px;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .chat-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 20px 20px 0 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            scrollbar-width: thin;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 0.8rem 1.2rem;
+            border-radius: 15px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            position: relative;
+        }
+
+        .chat-message.sent {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .chat-message.received {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 5px;
+        }
+
+        .chat-time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            display: block;
+            margin-top: 0.4rem;
+            text-align: right;
+        }
+
+        .chat-input-area {
+            padding: 1.5rem;
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0 0 20px 20px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 1rem;
+            border-radius: 50px;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+        }
+
+        .chat-input-area input:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
+        }
+
+        .btn-send {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--accent-secondary);
+            color: white;
+            border: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn-send:hover {
+            transform: scale(1.05);
+        }
+
         /* Tabs Styles */
         .tabs-container {
             display: flex;
@@ -898,9 +999,6 @@
             <li id="adminNavBtn" style="display: none;"><a href="/admin"
                     style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin
                     Panel</a></li>
-            <li><span id="campusBadge"
-                    style="display: none; background: rgba(46, 204, 113, 0.1); color: #2ecc71; padding: 0.4rem 0.8rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; border: 1px solid rgba(46, 204, 113, 0.3);">Campus
-                    Mode Active ✅</span></li>
         </ul>
     </nav>
     <main class="dashboard-container">
@@ -1050,59 +1148,76 @@
         </div>
     </div>
 
-    <!-- Campus Location Selection Modal -->
-    <div class="modal-overlay" id="locationModal" style="z-index: 2000;">
-        <div class="modal-content" style="max-width: 600px; text-align: center;">
-            <div class="modal-header" style="justify-content: center;">
-                <h2>Verify <span>Campus Location</span></h2>
-                <!-- No close button intentionally (forced on login if missing) -->
-            </div>
-            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">SwapPay requires live location verify that
-                you are within the campus boundary in order to create and view swap requests.</p>
-
-            <div id="locationMap"
-                style="height: 250px; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid var(--glass-border); z-index: 1; display: none;">
-            </div>
-
-            <div id="geoStatus" style="margin-bottom: 1.5rem; font-weight: 600; color: #f1c40f;">
-                Awaiting Location Permission...
-            </div>
-
-            <button type="button" id="verifyLocationBtn" class="btn-submit" onclick="requestGeolocation()">Give Location
-                Access</button>
-        </div>
-    </div>
-
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+    
+    <!-- Chat Modal -->
+    <div class="modal-overlay" id="chatModal">
+        <div class="modal-content chat-modal-content">
+            <div class="chat-header">
+                <div>
+                    <h2 style="font-size: 1.4rem; margin: 0;" id="chatPartnerName">Chat with <span>Partner</span></h2>
+                    <span style="font-size: 0.8rem; color: #2ecc71;" id="chatStatusText">● Online</span>
+                </div>
+                <button class="btn-close" onclick="closeChatModal()">&times;</button>
+            </div>
+            <div class="chat-messages" id="chatMessagesContainer">
+                <!-- Messages injected dynamically -->
+            </div>
+            <form class="chat-input-area" id="chatForm">
+                <input type="text" id="chatInputMessage" placeholder="Type a message or location..." required autocomplete="off">
+                <button type="submit" class="btn-send">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
 
     <!-- Socket.IO -->
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-        // Global Campus Geo-Fencing Constants
-        const CAMPUS_CENTER_LAT = 10.95698918766332;
-        const CAMPUS_CENTER_LNG = 77.95508250232707;
-        const ALLOWED_RADIUS_KM = 1.5;
-
-        let currentLat = null;
-        let currentLng = null;
-
-        // Haversine formula
-        function getDistanceInKm(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Radius of the earth in km
-            const dLat = (lat2 - lat1) * (Math.PI / 180);
-            const dLon = (lon2 - lon1) * (Math.PI / 180);
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
         let currentUserId = null;
         let socket = null;
+        let activeChatSwapId = null;
 
+        // Fetch session data gently just to get my userId.
+        fetch('/api/user/profile')
+            .then(res => res.json())
+            .then(data => {
+                if (data.id) {
+                    currentUserId = data.id;
+                    initializeSocketConnection();
+                }
+            })
+            .catch(err => console.error("Error fetching user data:", err));
+
+        function initializeSocketConnection() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Connected to socket server');
+                if (currentUserId) {
+                    socket.emit('join', currentUserId);
+                }
+            });
+
+            // Chat Message Listener
+            socket.on('receive_message', (msg) => {
+                if (activeChatSwapId && activeChatSwapId == msg.swap_id) {
+                    appendMessageToUI(msg);
+                } else {
+                    // Show a toast that they received a message if chat isn't open
+                    if (msg.sender_id !== currentUserId) {
+                        showToast(`New message from ${msg.sender_name}: ${msg.message}`, '💬');
+                    }
+                }
+            });
+        }
+        
         /**
          * Generic HTML Toast Helper
          */
@@ -1197,8 +1312,6 @@
                 allow_partial_match: document.getElementById('allowPartial').checked,
                 allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
                 auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked,
-                lat: currentLat,
-                lng: currentLng
             };
 
             try {
@@ -1381,6 +1494,8 @@
             const formattedRating = ratingVal ? (parseFloat(ratingVal)).toFixed(1) : 'New';
             const ratingBadge = `<span class="user-rating-badge" title="User's Average Rating">★ ${formattedRating}</span>`;
 
+            const headerName = isMyContext ? (swap.otherPartyName || (swap.isCreator ? 'You' : 'Swap Partner')) : swap.requester_name;
+
             let actionArea = '';
 
             if (isMyContext) {
@@ -1389,7 +1504,7 @@
                     if (swap.allow_partner_selection) {
                         actionArea = `
                             <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Partner Selection Enabled</div>
-                            <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount})" style="margin-top: 1rem;">View Available Partners</button>
+                            <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
                         `;
                     } else {
                         actionArea = `<div class="status-text warning" style="color: var(--text-secondary); background: none;">Waiting for peer</div>`;
@@ -1397,15 +1512,19 @@
                 } else if (swap.status === 'matched') {
                     let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
 
+                    let chatButtonHtml = `<button class="btn-accept-swap" onclick="openChatModal(${swap.id}, '${headerName}')" style="margin-top: 0.5rem; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6;">💬 Chat with Partner</button>`;
+
                     if (hasCompleted) {
                         actionArea = `
                             <div class="status-text warning" style="color: #f59e0b; border-color: #f59e0b;">Waiting for Partner to Confirm</div>
                             <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem; background: #64748b;">Confirmed by You</button>
+                            ${chatButtonHtml}
                         `;
                     } else {
                         actionArea = `
                             <div class="status-text warning">Swap Matched – Waiting for Completion</div>
                             <button class="btn-accept-swap" onclick="completeSwap(${swap.id})" style="margin-top: 1rem;">Mark as Completed</button>
+                            ${chatButtonHtml}
                         `;
                     }
                 } else if (swap.status === 'completed') {
@@ -1421,28 +1540,12 @@
                 actionArea = `<button class="btn-accept-swap btn-disabled" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); cursor: default;">${actionText}</button>`;
             }
 
-            const headerName = isMyContext ? (swap.isCreator ? 'You' : swap.otherPartyName) : swap.requester_name;
-
-            // Format distance if available
-            let distanceHtml = '';
-            let badgeHtml = '';
-            if (!isMyContext && swap.distanceKm !== undefined) {
-                // Formatting to meters if < 1km, else km
-                const distNum = parseFloat(swap.distanceKm);
-                const distMeters = Math.round(distNum * 1000);
-                distanceHtml = `<span style="margin-left: 10px; font-size: 0.85rem; color: #f1c40f; background: rgba(241, 196, 15, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(241, 196, 15, 0.3);">📍 ${distMeters}m away</span>`;
-
-                let distBadgeText = distMeters < 100 ? 'Very Close (<100m)' : 'Nearby';
-                let distBadgeColor = distMeters < 100 ? '#2ecc71' : '#3498db';
-                badgeHtml = `<span style="margin-left: 10px; font-size: 0.75rem; color: ${distBadgeColor}; background: ${distBadgeColor}22; padding: 2px 8px; border-radius: 12px; border: 1px solid ${distBadgeColor}55;">${distBadgeText}</span>`;
-            }
-
             return ` 
             <div class="swap-card ${statusClass}" > 
                 <div class="swap-card-header" > 
                     <div> 
                         <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;" >${headerName} ${headerName !== 'You' ? ratingBadge : ''}</h3> 
-                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>${distanceHtml}${badgeHtml}
+                        <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>
                     </div> 
                     <div style="text-align: right;" > 
                         <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary)" >₹${swap.amount}</div> 
@@ -1463,17 +1566,28 @@
         async function loadMySwaps() {
             const container = document.getElementById('mySwapsContainer');
             try {
-                const response = await fetch('/api/swaps/mySwaps');
-                if (!response.ok) throw new Error('Failed to fetch my swaps');
+                let fetchUrl = '/api/swaps/active';
+                if (currentTab === 'matched') fetchUrl = '/api/swaps/matched';
+                if (currentTab === 'completed') fetchUrl = '/api/swaps/completed';
 
-                const swaps = await response.json();
+                const response = await fetch(fetchUrl);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API returned ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                const swaps = data.swaps || [];
 
                 // Grouping Logic for Crowd-Swap
                 const parents = {};
                 const children = [];
 
                 swaps.forEach(swap => {
-                    if (!swap.parent_swap_id) {
+                    // It's a parent if it has NO parent_swap_id AND (no matched_parent_swap_id OR it's a legacy old structure)
+                    let isParent = !swap.parent_swap_id && !swap.matched_parent_swap_id;
+                    
+                    if (isParent || (!swap.parent_swap_id && swap.isCreator)) {
                         parents[swap.id] = { ...swap, childChunks: [] };
                     } else {
                         children.push(swap);
@@ -1484,23 +1598,24 @@
                     let myParentId = child.isCreator ? child.parent_swap_id : child.matched_parent_swap_id;
                     if (parents[myParentId]) {
                         parents[myParentId].childChunks.push(child);
+                    } else {
+                        // Orphaned child or legacy bug edge-case - just add it as its own parent to display it
+                        parents[child.id] = { ...child, childChunks: [] };
                     }
                 });
 
                 const groupedSwaps = Object.values(parents);
 
-                // Filter based on tab
+                // Filter based on tab (for 'active' we only show 'open' status if from my-swaps)
                 const filteredSwaps = groupedSwaps.filter(swap => {
                     if (currentTab === 'active') return swap.status === 'open';
-                    if (currentTab === 'matched') return swap.status === 'matched';
-                    if (currentTab === 'completed') return swap.status === 'completed';
-                    return false;
+                    return true; // the endpoints for matched/completed are already filtered by the backend
                 });
 
                 container.innerHTML = '';
 
                 if (filteredSwaps.length === 0) {
-                    container.innerHTML = `<p style="color: var(--text-secondary);">No ${currentTab} swaps found.</p>`;
+                    container.innerHTML = `<p style="color: var(--text-secondary);">No swaps yet.</p>`;
                     return;
                 }
 
@@ -1540,8 +1655,8 @@
                     }
                 });
             } catch (err) {
-                console.error(err);
-                container.innerHTML = '<p style="color: #ff6b6b;">Failed to load your swaps.</p>';
+                console.error("loadMySwaps error:", err);
+                container.innerHTML = `<p style="color: #ff6b6b; padding: 1rem; border: 1px dashed #ff6b6b; border-radius: 8px;">Failed to load your swaps. Please try refreshing.</p>`;
             }
         }
 
@@ -1550,14 +1665,16 @@
             const container = document.getElementById('swapsContainer');
 
             try {
-                const url = (currentLat && currentLng) 
-                    ? `/api/swaps/nearby?lat=${currentLat}&lng=${currentLng}` 
-                    : '/api/swaps/nearby';
+                const url = '/api/swaps/nearby';
 
                 const response = await fetch(url);
-                if (!response.ok) throw new Error('Failed to fetch');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API returned ${response.status}: ${errorText}`);
+                }
 
-                const swaps = await response.json();
+                const data = await response.json();
+                const swaps = data.swaps || [];
                 container.innerHTML = '';
 
                 if (swaps.length === 0) {
@@ -1579,7 +1696,7 @@
         let activeSelectionRequestedAmount = 0;
         let activeCandidatePartners = [];
 
-        window.openPartnerSelection = async function (swapId, requestedAmount) {
+        window.openPartnerSelection = async function (swapId, requestedAmount, swapType) {
             activeSelectionSwapId = swapId;
             activeSelectionRequestedAmount = parseFloat(requestedAmount);
 
@@ -1590,9 +1707,10 @@
             updateSelectionMath();
 
             try {
-                const response = await fetch(`/ api / swaps / availablePartners / ${swapId} `);
+                const response = await fetch(`/api/swaps/partners?amount=${requestedAmount}&type=${swapType}`);
                 if (!response.ok) throw new Error('Failed to fetch partners');
-                activeCandidatePartners = await response.json();
+                let resData = await response.json();
+                activeCandidatePartners = resData.partners || [];
 
                 if (activeCandidatePartners.length === 0) {
                     listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No partners available right now. Check back later!</p>';
@@ -1910,182 +2028,109 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await fetchCurrentUser(); // Fetch user first
 
-            // Check if campus location needs to be selected
-            await checkLocationStatus();
-
             loadStats();
             loadMySwaps();
             loadSwaps();
             loadNotifications();
         });
 
-        // Location Modal Logic
-        let locationMap = null;
-        let locationMarker = null;
+        // ---------------- Chat Logic ----------------
 
-        async function checkLocationStatus() {
+        const chatModal = document.getElementById('chatModal');
+        const chatForm = document.getElementById('chatForm');
+        const chatInputMessage = document.getElementById('chatInputMessage');
+        const chatMessagesContainer = document.getElementById('chatMessagesContainer');
+
+        async function openChatModal(swapId, partnerName) {
+            activeChatSwapId = swapId;
+            document.getElementById('chatPartnerName').innerHTML = `Chat with <span>${partnerName}</span>`;
+            chatMessagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-secondary); width: 100%;">Loading messages...</div>';
+            
+            chatModal.classList.add('active');
+
+            if (socket) {
+                socket.emit('join_swap_room', swapId);
+            }
+
+            // Fetch History
             try {
-                const res = await fetch('/api/user/profile');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (!data.user.campus_name) {
-                        openLocationModal();
-                    } else {
-                        currentLat = data.user.lat;
-                        currentLng = data.user.lng;
-                    }
-                }
-            } catch (err) {
-                console.error('Error checking location status:', err);
-            }
-        }
-
-        function openLocationModal() {
-            document.getElementById('locationModal').classList.add('active');
-            // Do not initialize map here! Wait for GPS permission.
-        }
-
-        function closeLocationModal() {
-            document.getElementById('locationModal').classList.remove('active');
-        }
-
-        async function requestGeolocation() {
-            console.log('Requesting GPS permission');
-            const statusDiv = document.getElementById('geoStatus');
-            const btn = document.getElementById('verifyLocationBtn');
-
-            if (!navigator.geolocation) {
-                statusDiv.innerHTML = "Geolocation is not supported by your browser";
-                statusDiv.style.color = "#e74c3c";
-                return;
-            }
-
-            // Must use HTTPS or localhost for geolocation
-            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                statusDiv.innerHTML = "Secure connection (HTTPS) required for geolocation.";
-                statusDiv.style.color = "#e74c3c";
-                return;
-            }
-
-            statusDiv.innerHTML = '<span class="spinner" style="display:inline-block; width:15px; height:15px; border:2px solid #f1c40f; border-top:2px solid transparent; border-radius:50%; animation:spin 1s linear infinite;"></span> Locating...';
-            statusDiv.style.color = "#f1c40f";
-            btn.disabled = true;
-
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    console.log('Coordinates received');
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    currentLat = lat;
-                    currentLng = lng;
-
-                    document.getElementById('locationMap').style.display = 'block';
-
-                    // Initialize Map NOW
-                    if (!locationMap) {
-                        locationMap = L.map('locationMap').setView([lat, lng], 16);
-                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            attribution: '&copy; OpenStreetMap contributors',
-                            maxZoom: 19
-                        }).addTo(locationMap);
-
-                        // Draw static campus boundary
-                        L.circle([CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG], {
-                            color: '#3498db',
-                            fillColor: '#3498db',
-                            fillOpacity: 0.1,
-                            radius: ALLOWED_RADIUS_KM * 1000 // Convert km to meters
-                        }).addTo(locationMap);
-                    }
-
-                    // Update UI Map
-                    if (locationMarker) locationMap.removeLayer(locationMarker);
-
-                    // Create a pulsating blue dot (custom CSS logic simplified with standard marker)
-                    locationMarker = L.circleMarker([lat, lng], {
-                        radius: 8,
-                        fillColor: "#e74c3c",
-                        color: "#fff",
-                        weight: 2,
-                        opacity: 1,
-                        fillOpacity: 0.8
-                    }).addTo(locationMap);
-
-                    locationMap.setView([lat, lng], 16);
-                    locationMap.invalidateSize(); // Ensure it renders properly after unhiding or creating
-
-                    const dist = getDistanceInKm(lat, lng, CAMPUS_CENTER_LAT, CAMPUS_CENTER_LNG);
-                    if (dist > ALLOWED_RADIUS_KM) {
-                        statusDiv.innerHTML = "You are outside the campus area. Swaps disabled.";
-                        statusDiv.style.color = "#e74c3c";
-                        btn.disabled = false;
-                        btn.textContent = "Retry Location";
-                        const campusBadge = document.getElementById('campusBadge');
-                        if (campusBadge) campusBadge.style.display = 'none';
-
-                        // Disable Quick Action buttons
-                        document.querySelectorAll('.actions-panel .action-card').forEach(card => {
-                            card.style.opacity = '0.5';
-                            card.style.pointerEvents = 'none';
-                        });
-
-                    } else {
-                        statusDiv.innerHTML = "Campus Verified ✅ Saving...";
-                        statusDiv.style.color = "#2ecc71";
-                        const campusBadge = document.getElementById('campusBadge');
-                        if (campusBadge) campusBadge.style.display = 'inline-block';
-
-                        // Enable Quick Action buttons
-                        document.querySelectorAll('.actions-panel .action-card').forEach(card => {
-                            card.style.opacity = '1';
-                            card.style.pointerEvents = 'auto';
-                        });
-
-                        // Proceed to backend save
-                        await saveGeoLocationToBackend(lat, lng);
-                    }
-                },
-                (error) => {
-                    console.log('Location error', error);
-                    let errorMsg = "Unable to retrieve your location";
-                    if (error.code === error.TIMEOUT) {
-                        errorMsg = "Location timeout. Please enable high accuracy GPS.";
-                    } else if (error.code === error.PERMISSION_DENIED) {
-                        errorMsg = "Location permission denied. Please allow access to use SwapPay.";
-                    }
-                    statusDiv.innerHTML = errorMsg;
-                    statusDiv.style.color = "#e74c3c";
-                    btn.disabled = false;
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
-
-        async function saveGeoLocationToBackend(lat, lng) {
-            try {
-                const response = await fetch('/api/user/location', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat, lng })
-                });
-
+                const response = await fetch(`/api/chat/${swapId}`);
                 if (response.ok) {
-                    showToast('Campus Location Verified!', '📍');
-                    closeLocationModal();
-                    const campusModeBadge = document.getElementById('campusModeBadge');
-                    if (campusModeBadge) campusModeBadge.style.display = 'inline-block';
-                    loadSwaps(); // reloading swaps as we have location now
+                    const messages = await response.json();
+                    chatMessagesContainer.innerHTML = '';
+                    
+                    if (messages.length === 0) {
+                        chatMessagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-secondary); width: 100%; margin-top: auto;">No messages yet. Send a location to meet up!</div>';
+                    } else {
+                        messages.forEach(msg => appendMessageToUI(msg));
+                    }
                 } else {
-                    const data = await response.json();
-                    alert(data.error || 'Failed to verify location with server.');
-                    document.getElementById('verifyLocationBtn').disabled = false;
+                    chatMessagesContainer.innerHTML = '<div style="color: #ff6b6b; text-align: center;">Failed to load chat history.</div>';
                 }
             } catch (err) {
-                console.error('Fetch Check Error:', err);
-                alert('An error occurred contacting the server. ' + err.message);
-                document.getElementById('verifyLocationBtn').disabled = false;
+                console.error(err);
+                chatMessagesContainer.innerHTML = '<div style="color: #ff6b6b; text-align: center;">Error loading chat.</div>';
             }
         }
+
+        function closeChatModal() {
+            activeChatSwapId = null;
+            chatModal.classList.remove('active');
+            chatForm.reset();
+        }
+
+        function appendMessageToUI(msg) {
+            const isSentByMe = (msg.sender_id === currentUserId);
+            
+            // Remove "No messages" placeholder if it exists
+            if (chatMessagesContainer.innerHTML.includes('No messages yet')) {
+                chatMessagesContainer.innerHTML = '';
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${isSentByMe ? 'sent' : 'received'}`;
+            
+            const timeString = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Escape HTML in message to prevent XSS
+            const safeMessage = msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+            messageDiv.innerHTML = `
+                ${safeMessage}
+                <span class="chat-time">${timeString}</span>
+            `;
+            
+            chatMessagesContainer.appendChild(messageDiv);
+            
+            // Auto scroll to bottom
+            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+        }
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = chatInputMessage.value.trim();
+            if (!text || !activeChatSwapId || !socket || !currentUserId) return;
+
+            socket.emit('send_message', {
+                swapId: activeChatSwapId,
+                senderId: currentUserId,
+                message: text
+            });
+
+            chatInputMessage.value = '';
+        });
+
+        // Add chatModal to global click listener
+        const oldWindowOnclick = window.onclick;
+        window.onclick = function(event) {
+            if (oldWindowOnclick) oldWindowOnclick(event);
+            if (event.target == chatModal) {
+                closeChatModal();
+            }
+        };
+
+        // ---------------- End Chat Logic ----------------
+
     </script>
 </body>
 

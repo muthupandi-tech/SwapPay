@@ -10,11 +10,19 @@ const pool = mysql.createPool({
 async function run() {
     try {
         console.log("Applying DB Alters for Partial Matching...");
-        await pool.execute('ALTER TABLE swaps ADD COLUMN total_amount DECIMAL(10,2) NOT NULL DEFAULT 0');
-        await pool.execute('ALTER TABLE swaps ADD COLUMN remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0');
-        await pool.execute('ALTER TABLE swaps ADD COLUMN allow_partial_match BOOLEAN DEFAULT FALSE');
-        await pool.execute('ALTER TABLE swaps ADD COLUMN parent_swap_id INT DEFAULT NULL');
-        await pool.execute('ALTER TABLE swaps ADD COLUMN matched_parent_swap_id INT DEFAULT NULL');
+        const addColumn = async (query) => {
+            try {
+                await pool.execute(query);
+            } catch (e) {
+                if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+            }
+        };
+
+        await addColumn('ALTER TABLE swaps ADD COLUMN total_amount DECIMAL(10,2) NOT NULL DEFAULT 0');
+        await addColumn('ALTER TABLE swaps ADD COLUMN remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0');
+        await addColumn('ALTER TABLE swaps ADD COLUMN allow_partial_match BOOLEAN DEFAULT FALSE');
+        await addColumn('ALTER TABLE swaps ADD COLUMN parent_swap_id INT DEFAULT NULL');
+        await addColumn('ALTER TABLE swaps ADD COLUMN matched_parent_swap_id INT DEFAULT NULL');
 
         console.log("Backfilling existing data...");
         await pool.execute('UPDATE swaps SET total_amount = amount, remaining_amount = amount WHERE total_amount = 0');

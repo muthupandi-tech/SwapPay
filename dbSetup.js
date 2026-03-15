@@ -150,8 +150,26 @@ connection.connect((err) => {
                                 } else {
                                     console.log('Table "settings" is ready.');
 
-                                    // Seed default email notification setting
-                                    const seedSettingQuery = `
+                                    const createChatMessagesTableQuery = `
+                                        CREATE TABLE IF NOT EXISTS chat_messages (
+                                            id INT AUTO_INCREMENT PRIMARY KEY,
+                                            swap_id INT NOT NULL,
+                                            sender_id INT NOT NULL,
+                                            message TEXT NOT NULL,
+                                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                            FOREIGN KEY (swap_id) REFERENCES swaps(id) ON DELETE CASCADE,
+                                            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+                                        )
+                                    `;
+
+                                    connection.query(createChatMessagesTableQuery, (err) => {
+                                        if (err) {
+                                            console.error('Error creating chat_messages table:', err);
+                                        } else {
+                                            console.log('Table "chat_messages" is ready.');
+
+                                            // Seed default email notification setting
+                                            const seedSettingQuery = `
                                         INSERT IGNORE INTO settings (setting_key, setting_value) 
                                         VALUES ('email_notifications_enabled', 'true'),
                                                ('reminder_interval_hours', '1'),

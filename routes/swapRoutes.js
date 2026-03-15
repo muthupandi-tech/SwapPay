@@ -25,12 +25,14 @@ router.post('/rateSwap/:id', swapController.rateSwap);
 // GET requests
 router.get('/nearby', swapController.getNearbySwaps);
 router.get('/stats', swapController.getDashboardStats);
-router.get('/mySwaps', swapController.getMySwaps);
+router.get('/active', swapController.getActiveSwaps);
+router.get('/matched', swapController.getMatchedSwaps);
+router.get('/completed', swapController.getCompletedSwaps);
 router.get('/notifications', swapController.getNotifications);
 router.post('/notifications/read/:id', swapController.markNotificationRead);
 
 // Partner Selection
-router.get('/availablePartners/:id', swapController.getAvailablePartners);
+router.get('/partners', swapController.getPartners);
 router.post('/confirmPartners', swapController.confirmPartnerSelection);
 
 module.exports = router;

@@ -1,5 +1,4 @@
 const mysql = require('mysql2');
-const geo = require('../utils/geo');
 const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail } = require('../utils/emailService');
 
 // Database connection using the configured details
@@ -17,23 +16,19 @@ const promisePool = pool.promise();
 
 // Create a new swap request
 exports.createSwap = async (req, res) => {
-    const { type, amount, location, lat, lng } = req.body;
+    const { type, amount, location } = req.body;
     const userId = req.session.userId;
 
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized. Please log in.' });
     }
 
-    if (!type || !amount || !location || lat === undefined || lng === undefined) {
-        return res.status(400).json({ error: 'Type, amount, location, latitude, and longitude are required.' });
+    if (!type || !amount || !location) {
+        return res.status(400).json({ error: 'Type, amount, and location are required.' });
     }
 
     if (type !== 'need_cash' && type !== 'need_upi') {
         return res.status(400).json({ error: 'Invalid swap type.' });
-    }
-
-    if (!geo.isInsideCampus(lat, lng)) {
-        return res.status(403).json({ error: 'Swaps can only be created within the 1500m campus radius.' });
     }
 
     try {
@@ -43,8 +38,8 @@ exports.createSwap = async (req, res) => {
         const parsedAmount = parseFloat(amount);
 
         // 1. Insert the PARENT swap request initially
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, lat, lng, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, lat, lng, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
         const newParentSwapId = result.insertId;
 
         const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
@@ -159,10 +154,10 @@ exports.createSwap = async (req, res) => {
 
                 // Create CHILD SWAP representing the exact match chunk
                 const [childResult] = await promisePool.execute(`
-                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, lat, lng, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
                 `, [
-                    userId, type, chunkAmount, chunkAmount, 0, location, lat, lng, 'matched', candidate.user_id, newParentSwapId, candidate.id
+                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id
                 ]);
 
                 matchedChunks.push({
@@ -268,25 +263,9 @@ exports.getNearbySwaps = async (req, res) => {
     }
 
     try {
-        let userLat = parseFloat(req.query.lat);
-        let userLng = parseFloat(req.query.lng);
-
-        if (isNaN(userLat) || isNaN(userLng)) {
-            // First get the user's location to calculate distance
-            const [userRows] = await promisePool.execute('SELECT lat, lng FROM users WHERE id = ?', [userId]);
-            userLat = userRows[0]?.lat;
-            userLng = userRows[0]?.lng;
-        }
-
-        // Note: If user hasn't set location, they shouldn't even see the swaps
-        // But we'll return an empty array or handle error gently
-        if (!userLat || !userLng) {
-            return res.status(200).json([]); // Frontend will be showing location permission modal anyway
-        }
-
         // Fetch open swaps and join with users table to get the requester's name AND average rating
         const query = `
-            SELECT s.id, s.type, s.amount, s.location, s.lat, s.lng, s.created_at, u.name as requester_name,
+            SELECT s.id, s.type, s.amount, s.location, s.created_at, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
@@ -295,25 +274,9 @@ exports.getNearbySwaps = async (req, res) => {
         `;
         const [rows] = await promisePool.execute(query, [userId]);
 
-        // Filter and map to include distance
-        const enhancedRows = [];
-        for (const swap of rows) {
-            if (swap.lat && swap.lng) {
-                const distanceKm = geo.getDistanceInKm(userLat, userLng, swap.lat, swap.lng);
-                // Also verify swap is strictly within campus radius
-                if (geo.isInsideCampus(swap.lat, swap.lng)) {
-                    enhancedRows.push({
-                        ...swap,
-                        distanceKm: distanceKm.toFixed(2) // Format to 2 decimal places
-                    });
-                }
-            }
-        }
+        const enhancedRows = rows.map(swap => ({ ...swap, distanceKm: undefined }));
 
-        // Sort by closest distance
-        enhancedRows.sort((a, b) => parseFloat(a.distanceKm) - parseFloat(b.distanceKm));
-
-        res.status(200).json(enhancedRows);
+        res.status(200).json({ success: true, swaps: enhancedRows });
     } catch (error) {
         console.error('Error fetching swaps:', error);
         res.status(500).json({ error: 'An error occurred while fetching swaps.' });
@@ -493,8 +456,8 @@ exports.getDashboardStats = async (req, res) => {
     }
 };
 
-// Get the current user's swaps (open, matched, completed)
-exports.getMySwaps = async (req, res) => {
+// Get the current user's active swaps 
+exports.getActiveSwaps = async (req, res) => {
     const userId = req.session.userId;
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized.' });
@@ -502,18 +465,17 @@ exports.getMySwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.created_at, s.user_id, s.matched_user_id,
-            s.creator_completed, s.acceptor_completed, s.parent_swap_id, s.matched_parent_swap_id,
+            SELECT s.*,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE s.user_id = ? OR s.matched_user_id = ?
+            WHERE s.user_id = ? AND s.status = 'open'
             ORDER BY s.created_at DESC
         `;
-        const [rows] = await promisePool.execute(query, [userId, userId]);
+        const [rows] = await promisePool.execute(query, [userId]);
 
         // Add context for the frontend
         const swapsWithContext = rows.map(swap => {
@@ -522,17 +484,93 @@ exports.getMySwaps = async (req, res) => {
                 // Determine if the logged in user is the creator
                 isCreator: swap.user_id === userId,
                 // Easy access to the "other" party's name
-                otherPartyName: swap.user_id === userId ? (swap.matched_name || 'Waiting...') : swap.creator_name,
-                otherPartyId: swap.user_id === userId ? swap.matched_user_id : swap.user_id,
+                otherPartyName: swap.matched_name || 'Waiting...',
+                otherPartyId: swap.matched_user_id,
                 // Add the relevant rating based on who created vs matched
+                otherPartyRating: swap.matched_rating
+            };
+        });
+
+        res.status(200).json({ success: true, swaps: swapsWithContext });
+    } catch (error) {
+        console.error('Error fetching my swaps:', error);
+        res.status(500).json({ error: 'An error occurred while fetching your swaps.' });
+    }
+};
+
+// Get Matched Swaps
+exports.getMatchedSwaps = async (req, res) => {
+    const userId = req.session.userId;
+    if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+        const query = `
+            SELECT s.*,
+            u1.name as creator_name, u2.name as matched_name,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
+            FROM swaps s 
+            LEFT JOIN users u1 ON s.user_id = u1.id 
+            LEFT JOIN users u2 ON s.matched_user_id = u2.id
+            WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'matched'
+            ORDER BY s.created_at DESC
+        `;
+        const [rows] = await promisePool.execute(query, [userId, userId]);
+
+        const swapsWithContext = rows.map(swap => {
+            return {
+                ...swap,
+                isCreator: swap.user_id === userId,
+                otherPartyName: swap.user_id === userId ? swap.matched_name : swap.creator_name,
+                otherPartyId: swap.user_id === userId ? swap.matched_user_id : swap.user_id,
                 otherPartyRating: swap.user_id === userId ? swap.matched_rating : swap.creator_rating
             };
         });
 
-        res.status(200).json(swapsWithContext);
+        res.status(200).json({ success: true, swaps: swapsWithContext });
     } catch (error) {
-        console.error('Error fetching my swaps:', error);
-        res.status(500).json({ error: 'An error occurred while fetching your swaps.' });
+        console.error('Error fetching matched swaps:', error);
+        res.status(500).json({ error: 'An error occurred while fetching matched swaps.' });
+    }
+};
+
+// Get Completed Swaps
+exports.getCompletedSwaps = async (req, res) => {
+    const userId = req.session.userId;
+    if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+        const query = `
+            SELECT s.*,
+            u1.name as creator_name, u2.name as matched_name,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
+            FROM swaps s 
+            LEFT JOIN users u1 ON s.user_id = u1.id 
+            LEFT JOIN users u2 ON s.matched_user_id = u2.id
+            WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'completed'
+            ORDER BY s.created_at DESC
+        `;
+        const [rows] = await promisePool.execute(query, [userId, userId]);
+
+        const swapsWithContext = rows.map(swap => {
+            return {
+                ...swap,
+                isCreator: swap.user_id === userId,
+                otherPartyName: swap.user_id === userId ? swap.matched_name : swap.creator_name,
+                otherPartyId: swap.user_id === userId ? swap.matched_user_id : swap.user_id,
+                otherPartyRating: swap.user_id === userId ? swap.matched_rating : swap.creator_rating
+            };
+        });
+
+        res.status(200).json({ success: true, swaps: swapsWithContext });
+    } catch (error) {
+        console.error('Error fetching completed swaps:', error);
+        res.status(500).json({ error: 'An error occurred while fetching completed swaps.' });
     }
 };
 
@@ -651,21 +689,27 @@ exports.markNotificationRead = async (req, res) => {
 };
 
 // Fetch available partners for a specific open swap
-exports.getAvailablePartners = async (req, res) => {
+exports.getPartners = async (req, res) => {
     const userId = req.session.userId;
-    const swapId = req.params.id;
-
     if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
 
     try {
-        const [swapRows] = await promisePool.execute('SELECT type, remaining_amount, allow_partial_match, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
-        if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
+        const { amount, type } = req.query; 
 
-        const mySwap = swapRows[0];
-        if (mySwap.status !== 'open') return res.status(400).json({ error: 'Swap is no longer open.' });
+        if (!amount || !type) {
+            return res.status(400).json({ error: 'Missing amount or type parameters.' });
+        }
 
-        const oppositeType = mySwap.type === 'need_cash' ? 'need_upi' : 'need_cash';
-        let remainingNeeded = parseFloat(mySwap.remaining_amount);
+        let oppositeType;
+        if (type === 'need_cash' || type === 'CASH') {
+             oppositeType = 'need_upi'; // Requester needs cash, find people offering cash (need_upi)
+        } else if (type === 'need_upi' || type === 'UPI') {
+             oppositeType = 'need_cash';
+        } else {
+             return res.status(400).json({ error: 'Invalid type parameter' });
+        }
+
+        let remainingNeeded = parseFloat(amount);
 
         let candidateQuery = `
             SELECT s.*, u.name as partner_name, u.email as partner_email,
@@ -676,23 +720,13 @@ exports.getAvailablePartners = async (req, res) => {
               AND s.type = ? 
               AND s.user_id != ? 
               AND s.remaining_amount > 0
+            ORDER BY s.created_at ASC LIMIT 50
         `;
         let queryParams = [oppositeType, userId];
 
-        if (!mySwap.allow_partial_match) {
-            candidateQuery += ` AND s.remaining_amount >= ? AND (s.allow_partial_match = TRUE OR s.remaining_amount = ?) `;
-            queryParams.push(remainingNeeded, remainingNeeded);
-        } else {
-            candidateQuery += ` AND (s.allow_partial_match = TRUE OR s.remaining_amount <= ?) `;
-            queryParams.push(remainingNeeded);
-        }
-
-        candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = ? THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
-        queryParams.push(remainingNeeded);
-
         const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
 
-        const candidates = matchRows.map(r => ({
+        const validPartners = matchRows.map(r => ({
             id: r.id,
             partner_name: r.partner_name,
             partner_rating: r.partner_rating,
@@ -700,9 +734,9 @@ exports.getAvailablePartners = async (req, res) => {
             amount: parseFloat(r.remaining_amount)
         }));
 
-        res.status(200).json(candidates);
+        res.status(200).json({ success: true, partners: validPartners });
     } catch (error) {
-        console.error('Error fetching available partners:', error);
+        console.error('Swap API error:', error);
         res.status(500).json({ error: 'Failed to fetch partners.' });
     }
 };
