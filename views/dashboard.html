@@ -1216,6 +1216,40 @@
                     }
                 }
             });
+
+            // Instant Chat Listener
+            socket.on("newMessage", (msg) => {
+                // If the chat for this swap is currently open, add it to the UI
+                if (activeChatSwapId && activeChatSwapId == msg.swapId) {
+                    addMessageToChatUI(msg);
+                } else {
+                    // Show notification if it's from someone else
+                    if (msg.senderId !== currentUserId) {
+                        showToast(`New message from ${msg.senderName}: ${msg.message}`, '💬');
+                    }
+                }
+            });
+
+            // Typing Indicator Listeners
+            socket.on('userTyping', (senderId) => {
+                if (activeChatSwapId) {
+                    const statusText = document.getElementById('chatStatusText');
+                    if (senderId !== currentUserId && statusText) {
+                        statusText.innerHTML = '● Typing...';
+                        statusText.style.color = '#3498db';
+                    }
+                }
+            });
+
+            socket.on('userStopTyping', (senderId) => {
+                if (activeChatSwapId) {
+                    const statusText = document.getElementById('chatStatusText');
+                    if (senderId !== currentUserId && statusText) {
+                        statusText.innerHTML = '● Online';
+                        statusText.style.color = '#2ecc71';
+                    }
+                }
+            });
         }
         
         /**
@@ -1501,14 +1535,10 @@
             if (isMyContext) {
                 // My Swap Context
                 if (swap.status === 'open') {
-                    if (swap.allow_partner_selection) {
-                        actionArea = `
-                            <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Partner Selection Enabled</div>
-                            <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
-                        `;
-                    } else {
-                        actionArea = `<div class="status-text warning" style="color: var(--text-secondary); background: none;">Waiting for peer</div>`;
-                    }
+                    actionArea = `
+                        <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Bidirectional Matching Available</div>
+                        <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
+                    `;
                 } else if (swap.status === 'matched') {
                     let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
 
@@ -1720,18 +1750,19 @@
                 listContainer.innerHTML = activeCandidatePartners.map(p => {
                     const ratingStr = p.partner_rating ? `⭐${parseFloat(p.partner_rating).toFixed(1)} ` : 'New';
                     return `
-                    < div style = "background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;" >
-                            <div>
+                    <div style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;" class="partner-item" data-id="${p.id}">
+                            <div style="flex: 1;">
                                 <h4 style="margin: 0 0 5px 0; color: var(--text-primary);">${p.partner_name} <span style="font-size: 0.8rem; color: var(--accent-secondary); margin-left: 5px;">${ratingStr}</span></h4>
                                 <div style="font-size: 0.9rem; color: var(--text-secondary);">
                                     <span>Offers: <strong style="color: var(--accent-primary);">₹${p.amount}</strong></span>
                                     <span style="margin-left: 10px;">📍 ${p.location}</span>
                                 </div>
+                                <div class="capped-info" style="font-size: 0.8rem; color: var(--accent-secondary); margin-top: 5px; display: none;"></div>
                             </div>
                             <div>
                                 <input type="checkbox" class="partner-checkbox" data-id="${p.id}" data-amount="${p.amount}" onchange="updateSelectionMath()" style="width: 20px; height: 20px; accent-color: var(--accent-primary); cursor: pointer;">
                             </div>
-                        </div >
+                        </div>
                     `;
                 }).join('');
 
@@ -1748,37 +1779,61 @@
         };
 
         window.updateSelectionMath = function () {
-            let selectedSum = 0;
-            const checkboxes = document.querySelectorAll('.partner-checkbox:checked');
-
-            checkboxes.forEach(cb => {
-                selectedSum += parseFloat(cb.getAttribute('data-amount'));
-            });
-
-            let remaining = activeSelectionRequestedAmount - selectedSum;
-
+            let effectiveTotal = 0;
+            let currentRemainingNeeded = activeSelectionRequestedAmount;
+            
+            const checkboxes = document.querySelectorAll('.partner-checkbox');
             const btn = document.getElementById('confirmPartnersBtn');
             const mathDisplay = document.getElementById('partnerSelectionMath');
 
-            if (remaining < 0) {
-                mathDisplay.innerHTML = `⚠️ Over - selected by ₹${Math.abs(remaining).toFixed(2)} !`;
-                mathDisplay.style.color = '#ff6b6b';
-                mathDisplay.parentElement.style.borderColor = '#ff6b6b';
-                mathDisplay.parentElement.style.background = 'rgba(255, 107, 107, 0.1)';
-                btn.disabled = true;
-                btn.innerText = 'Cannot Exceed Request Amount';
-                btn.style.opacity = '0.5';
-            } else {
-                mathDisplay.innerHTML = `₹${activeSelectionRequestedAmount} Requested — <strong>₹${selectedSum} Selected</strong> — ₹${remaining} Remaining`;
+            checkboxes.forEach(cb => {
+                const partnerItem = cb.closest('.partner-item');
+                const cappedInfo = partnerItem.querySelector('.capped-info');
+                const partnerAmount = parseFloat(cb.getAttribute('data-amount'));
+
+                if (cb.checked) {
+                    let usedFromThisPartner = Math.min(partnerAmount, currentRemainingNeeded);
+                    
+                    if (usedFromThisPartner < partnerAmount && usedFromThisPartner > 0) {
+                        cappedInfo.innerText = `💡 Note: Only ₹${usedFromThisPartner} will be used from this partner`;
+                        cappedInfo.style.display = 'block';
+                    } else if (usedFromThisPartner <= 0) {
+                        cappedInfo.innerText = `⚠️ Note: This partner exceeds your current needed total`;
+                        cappedInfo.style.display = 'block';
+                    } else {
+                        cappedInfo.style.display = 'none';
+                    }
+
+                    effectiveTotal += usedFromThisPartner;
+                    currentRemainingNeeded -= usedFromThisPartner;
+                } else {
+                    cappedInfo.style.display = 'none';
+                }
+            });
+
+            let remaining = Math.max(0, activeSelectionRequestedAmount - effectiveTotal);
+
+            if (effectiveTotal > 0) {
+                mathDisplay.innerHTML = `₹${activeSelectionRequestedAmount} Requested — <strong>₹${effectiveTotal} Effective Selected</strong> — ₹${remaining.toFixed(2)} Remaining`;
                 mathDisplay.style.color = '#2ecc71';
                 mathDisplay.parentElement.style.borderColor = '#2ecc71';
                 mathDisplay.parentElement.style.background = 'rgba(46, 204, 113, 0.1)';
-                btn.disabled = selectedSum === 0;
-                btn.innerText = 'Confirm Swap';
-                btn.style.opacity = selectedSum > 0 ? '1' : '0.5';
+                
+                btn.disabled = false;
+                btn.innerText = remaining === 0 ? 'Confirm Full Swap' : 'Confirm Partial Swap';
+                btn.style.opacity = '1';
+            } else {
+                mathDisplay.innerHTML = `₹${activeSelectionRequestedAmount} Requested — <strong>₹0 Selected</strong> — ₹${activeSelectionRequestedAmount} Remaining`;
+                mathDisplay.style.color = '#2ecc71';
+                mathDisplay.parentElement.style.borderColor = '#2ecc71';
+                mathDisplay.parentElement.style.background = 'rgba(46, 204, 113, 0.1)';
+                
+                btn.disabled = true;
+                btn.innerText = 'Select Partners';
+                btn.style.opacity = '0.5';
             }
 
-            return { selectedSum, remaining };
+            return { effectiveTotal, remaining };
         };
 
         window.confirmSelection = async function () {
@@ -2079,6 +2134,18 @@
             chatForm.reset();
         }
 
+        // Add message specifically for real-time Socket updates
+        function addMessageToChatUI(msg) {
+            // Map the newMessage format to the internal UI format
+            const uiMsg = {
+                sender_id: msg.senderId,
+                message: msg.message,
+                created_at: msg.timestamp,
+                sender_name: msg.senderName
+            };
+            appendMessageToUI(uiMsg);
+        }
+
         function appendMessageToUI(msg) {
             const isSentByMe = (msg.sender_id === currentUserId);
             
@@ -2117,7 +2184,38 @@
                 message: text
             });
 
+            const currentSwapId = activeChatSwapId;
+            socket.emit("stopTyping", {
+              swapId: currentSwapId,
+              senderId: currentUserId
+            });
+            if (typingTimeout) clearTimeout(typingTimeout);
+
             chatInputMessage.value = '';
+        });
+
+        let typingTimeout = null;
+
+        chatInputMessage.addEventListener('input', () => {
+            if (!activeChatSwapId || !socket || !currentUserId) return;
+            const currentSwapId = activeChatSwapId;
+
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+            } else {
+                socket.emit("typing", {
+                  swapId: currentSwapId,
+                  senderId: currentUserId
+                });
+            }
+
+            typingTimeout = setTimeout(() => {
+                socket.emit("stopTyping", {
+                  swapId: currentSwapId,
+                  senderId: currentUserId
+                });
+                typingTimeout = null;
+            }, 1500);
         });
 
         // Add chatModal to global click listener

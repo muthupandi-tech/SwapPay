@@ -35,6 +35,7 @@ io.on('connection', (socket) => {
     socket.on('join_swap_room', (swapId) => {
         if (swapId) {
             socket.join(`swap_${swapId}`);
+            socket.join(swapId);
             console.log(`Socket ${socket.id} joined chat room swap_${swapId}`);
         }
     });
@@ -50,7 +51,19 @@ io.on('connection', (socket) => {
             const savedMessageObject = await chatController.saveMessage(swapId, senderId, message);
             
             if (savedMessageObject) {
-                // Broadcast the message back to everyone in the room (including sender to confirm receipt)
+                const messageData = {
+                    swapId: savedMessageObject.swap_id,
+                    senderId: savedMessageObject.sender_id,
+                    senderName: savedMessageObject.sender_name,
+                    message: savedMessageObject.message,
+                    timestamp: savedMessageObject.created_at
+                };
+
+                // Broadcast the message back to everyone in the room using the new event name
+                // Also ensures the sender gets it so they see it instantly
+                io.to(swapId).emit("newMessage", messageData);
+
+                // Keep legacy event for compatibility if needed elsewhere
                 io.to(`swap_${swapId}`).emit('receive_message', savedMessageObject);
             }
         } catch (error) {
@@ -58,6 +71,14 @@ io.on('connection', (socket) => {
             // Optionally emit an error event back to sender
         }
     });
+
+    socket.on("typing", (data) => {
+      socket.to(data.swapId).emit("userTyping", data.senderId)
+    })
+
+    socket.on("stopTyping", (data) => {
+      socket.to(data.swapId).emit("userStopTyping", data.senderId)
+    })
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
