@@ -581,9 +581,12 @@
         .chat-time {
             font-size: 0.7rem;
             opacity: 0.7;
-            display: block;
-            margin-top: 0.4rem;
             text-align: right;
+        }
+
+        .chat-status {
+            font-size: 0.8rem;
+            line-height: 1;
         }
 
         .chat-input-area {
@@ -976,6 +979,25 @@
         .profile-dropdown-item.text-danger:hover {
             background: rgba(255, 107, 107, 0.1);
         }
+
+        /* Feed Specific Styles Requested by User */
+        #swapFeedContainer .swap-card {
+            background: #111;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            color: white;
+        }
+
+        #swapFeedContainer .accept-btn {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #6c63ff;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -1050,10 +1072,14 @@
             </div>
         </div>
         <div class="swaps-section">
-            <h2 class="swaps-header">Available Swaps Nearby</h2>
-            <div class="swaps-grid" id="swapsContainer">
+            <div class="tabs-container" style="margin-bottom: 1.5rem; justify-content: flex-start;">
+                <button id="tabAvailable" class="tab-btn active" onclick="switchGlobalTab('available')">Available Swaps</button>
+                <button id="tabFeed" class="tab-btn" onclick="switchGlobalTab('feed')">Swap Feed</button>
+            </div>
+            <div class="swaps-grid" id="swapsContainer" style="display: grid;">
                 <p style="color: var(--text-secondary);">Loading swaps...</p>
             </div>
+            <div id="swapFeedContainer" style="display: none;"></div>
         </div>
     </main>
 
@@ -1205,29 +1231,23 @@
                 }
             });
 
-            // Chat Message Listener
-            socket.on('receive_message', (msg) => {
-                if (activeChatSwapId && activeChatSwapId == msg.swap_id) {
-                    appendMessageToUI(msg);
-                } else {
-                    // Show a toast that they received a message if chat isn't open
-                    if (msg.sender_id !== currentUserId) {
-                        showToast(`New message from ${msg.sender_name}: ${msg.message}`, '💬');
-                    }
+            // Chat Room Joining
+            function joinChatRoom(swapId) {
+                if (socket && swapId) {
+                    socket.emit('joinRoom', swapId);
                 }
+            }
+
+            // Chat Status Listener
+            socket.on("messageStatusUpdate", (data) => {
+              updateMessageStatusInUI(data.messageId, data.status);
             });
 
             // Instant Chat Listener
+            console.log("Listening for newMessage");
             socket.on("newMessage", (msg) => {
-                // If the chat for this swap is currently open, add it to the UI
-                if (activeChatSwapId && activeChatSwapId == msg.swapId) {
-                    addMessageToChatUI(msg);
-                } else {
-                    // Show notification if it's from someone else
-                    if (msg.senderId !== currentUserId) {
-                        showToast(`New message from ${msg.senderName}: ${msg.message}`, '💬');
-                    }
-                }
+              console.log("Received message:", msg);
+              addMessageToChatUI(msg);
             });
 
             // Typing Indicator Listeners
@@ -1721,6 +1741,88 @@
             }
         }
 
+        // --- NEW SWAP FEED LOGIC ---
+        let currentGlobalTab = 'available';
+
+        window.switchGlobalTab = function(tabName) {
+            currentGlobalTab = tabName;
+            
+            document.getElementById('tabAvailable').classList.remove('active');
+            document.getElementById('tabFeed').classList.remove('active');
+            
+            const sCont = document.getElementById('swapsContainer');
+            const fCont = document.getElementById('swapFeedContainer');
+
+            if (tabName === 'available') {
+                document.getElementById('tabAvailable').classList.add('active');
+                sCont.style.display = 'grid';
+                fCont.style.display = 'none';
+                loadSwaps();
+            } else if (tabName === 'feed') {
+                document.getElementById('tabFeed').classList.add('active');
+                sCont.style.display = 'none';
+                fCont.style.display = 'block';
+                loadSwapFeed();
+            }
+        };
+
+        async function loadSwapFeed() {
+            const container = document.getElementById('swapFeedContainer');
+            container.innerHTML = "Loading swaps...";
+
+            try {
+                const response = await fetch("/api/swaps/feed", {
+                    method: "GET",
+                    credentials: "include"
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed fetching feed");
+                }
+
+                const data = await response.json();
+                console.log("Feed data:", data);
+
+                container.innerHTML = "";
+                if (data.swaps.length === 0) {
+                    container.innerHTML = "No swaps available";
+                    return;
+                }
+
+                data.swaps.forEach(swap => {
+                    const card = document.createElement("div");
+                    card.className = "swap-card";
+
+                    card.innerHTML = `
+                      <div class="swap-user">${swap.name}</div>
+                      <div class="swap-amount">₹${swap.amount}</div>
+                      <div class="swap-type">
+                        Needs ${swap.type === "UPI" ? "Cash" : "UPI"}
+                      </div>
+                      <div class="swap-time">
+                        ${new Date(swap.created_at).toLocaleString()}
+                      </div>
+
+                      <button class="accept-btn" data-id="${swap.id}">
+                        Accept Swap
+                      </button>
+                    `;
+
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                console.error("Feed error:", err);
+                container.innerHTML = "Failed to load feed.";
+            }
+        }
+
+        document.addEventListener("click", (e) => {
+            if (e.target.classList.contains("accept-btn")) {
+                const swapId = e.target.dataset.id;
+                console.log("Accept swap:", swapId);
+            }
+        });
+
         // Partner Selection Logic
         let activeSelectionSwapId = null;
         let activeSelectionRequestedAmount = 0;
@@ -2104,7 +2206,9 @@
             chatModal.classList.add('active');
 
             if (socket) {
-                socket.emit('join_swap_room', swapId);
+                socket.emit('joinRoom', swapId);
+                // Mark all messages as seen when opening the chat
+                socket.emit("messageSeen", { swapId: swapId, userId: currentUserId });
             }
 
             // Fetch History
@@ -2138,36 +2242,107 @@
         function addMessageToChatUI(msg) {
             // Map the newMessage format to the internal UI format
             const uiMsg = {
-                sender_id: msg.senderId,
+                id: msg.id || msg.clientMsgId || 'temp_' + Date.now(),
+                clientMsgId: msg.clientMsgId, // Preserve for sync
+                sender_id: msg.senderId || msg.sender_id,
                 message: msg.message,
-                created_at: msg.timestamp,
-                sender_name: msg.senderName
+                created_at: msg.timestamp || msg.created_at,
+                sender_name: msg.senderName || msg.sender_name,
+                status: msg.status || 'sent'
             };
             appendMessageToUI(uiMsg);
+        }
+
+        function updateMessageStatusInUI(data) {
+            if (data.status === 'seen') {
+                // Bulk update seen status for messages sent by me
+                if (data.viewerId && data.viewerId !== currentUserId) {
+                    const sentStatusSpans = chatMessagesContainer.querySelectorAll('.chat-message.sent .chat-status');
+                    sentStatusSpans.forEach(span => {
+                        span.innerText = '✓✓';
+                        span.style.color = '#3498db';
+                        span.style.fontWeight = 'bold';
+                        span.style.opacity = '1';
+                    });
+                }
+            } else if (data.messageId) {
+                // Specific message update (delivered)
+                const msgDiv = chatMessagesContainer.querySelector(`.chat-message[data-msg-id="${data.messageId}"]`);
+                if (msgDiv) {
+                    const statusSpan = msgDiv.querySelector('.chat-status');
+                    if (statusSpan && data.status === 'delivered') {
+                        statusSpan.innerText = '✓✓';
+                    }
+                }
+            }
         }
 
         function appendMessageToUI(msg) {
             const isSentByMe = (msg.sender_id === currentUserId);
             
+            // Check if message already exists (optimistic UI or duplicate)
+            let existingMsg = chatMessagesContainer.querySelector(`.chat-message[data-msg-id="${msg.id}"]`);
+            
+            // If not found by permanent ID, check by clientMsgId for optimistic match
+            if (!existingMsg && msg.clientMsgId) {
+                existingMsg = chatMessagesContainer.querySelector(`.chat-message[data-msg-id="${msg.clientMsgId}"]`);
+            }
+            
+            // Fallback: check for temp match if this is a real ID update but clientMsgId was somehow lost
+            if (!existingMsg && msg.id && !msg.id.toString().startsWith('temp_')) {
+                if (isSentByMe) {
+                    const tempMsgs = chatMessagesContainer.querySelectorAll('.chat-message.sent[data-msg-id^="temp_"]');
+                    for (let temp of tempMsgs) {
+                        const text = temp.querySelector('.message-text').innerText;
+                        if (text === msg.message) {
+                            existingMsg = temp;
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Remove "No messages" placeholder if it exists
             if (chatMessagesContainer.innerHTML.includes('No messages yet')) {
                 chatMessagesContainer.innerHTML = '';
             }
 
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-message ${isSentByMe ? 'sent' : 'received'}`;
-            
             const timeString = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            // Escape HTML in message to prevent XSS
-            const safeMessage = msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const safeMessage = (msg.message || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-            messageDiv.innerHTML = `
-                ${safeMessage}
-                <span class="chat-time">${timeString}</span>
+            let statusHtml = '';
+            if (isSentByMe) {
+                let ticks = '✓';
+                let style = 'opacity: 0.6;';
+                if (msg.status === 'delivered') {
+                    ticks = '✓✓';
+                } else if (msg.status === 'seen') {
+                    ticks = '✓✓';
+                    style = 'color: #3498db; font-weight: bold; opacity: 1;';
+                }
+                statusHtml = `<span class="chat-status" style="font-size: 0.8rem; margin-top: 2px; ${style}">${ticks}</span>`;
+            }
+
+            const innerHTML = `
+                <div class="message-text">${safeMessage}</div>
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 2px;">
+                  <span class="chat-time" style="font-size: 0.7rem;">${timeString}</span>
+                  ${statusHtml}
+                </div>
             `;
-            
-            chatMessagesContainer.appendChild(messageDiv);
+
+            if (existingMsg) {
+                existingMsg.innerHTML = innerHTML;
+                existingMsg.setAttribute('data-msg-id', msg.id);
+                // Update status if it changed
+                existingMsg.className = `chat-message ${isSentByMe ? 'sent' : 'received'}`;
+            } else {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${isSentByMe ? 'sent' : 'received'}`;
+                messageDiv.setAttribute('data-msg-id', msg.id);
+                messageDiv.innerHTML = innerHTML;
+                chatMessagesContainer.appendChild(messageDiv);
+            }
             
             // Auto scroll to bottom
             chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
@@ -2178,10 +2353,23 @@
             const text = chatInputMessage.value.trim();
             if (!text || !activeChatSwapId || !socket || !currentUserId) return;
 
+            const tempId = 'temp_' + Date.now();
+            
+            // Optimistic Update
+            addMessageToChatUI({
+                id: tempId,
+                senderId: currentUserId,
+                message: text,
+                timestamp: new Date(),
+                senderName: 'You',
+                status: 'sent'
+            });
+
             socket.emit('send_message', {
                 swapId: activeChatSwapId,
                 senderId: currentUserId,
-                message: text
+                message: text,
+                clientMsgId: tempId // Pass along to server for tracking
             });
 
             const currentSwapId = activeChatSwapId;

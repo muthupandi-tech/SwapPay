@@ -36,7 +36,7 @@ const chatController = {
             // 2. Fetch messages ordered by creation time
             const query = `
                 SELECT 
-                    cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at,
+                    cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at, cm.status,
                     u.name as sender_name
                 FROM chat_messages cm
                 JOIN users u ON cm.sender_id = u.id
@@ -59,10 +59,13 @@ const chatController = {
     saveMessage: async (swapId, senderId, message) => {
         try {
             // Check if swap is still active/matched
-            const [swapRows] = await pool.execute('SELECT status FROM swaps WHERE id = ?', [swapId]);
+            const [swapRows] = await pool.execute('SELECT user_id, matched_user_id, status FROM swaps WHERE id = ?', [swapId]);
             if (swapRows.length === 0 || swapRows[0].status !== 'matched') {
                 return null;
             }
+            const swap = swapRows[0];
+            const receiverId = (swap.user_id === parseInt(senderId)) ? swap.matched_user_id : swap.user_id;
+
 
             // Insert
             const [result] = await pool.execute(
@@ -73,17 +76,61 @@ const chatController = {
             // Fetch back to return complete object including timestamp & sender name
             const [newMessage] = await pool.execute(`
                 SELECT 
-                    cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at,
+                    cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at, cm.status,
                     u.name as sender_name
                 FROM chat_messages cm
                 JOIN users u ON cm.sender_id = u.id
                 WHERE cm.id = ?
             `, [result.insertId]);
 
-            return newMessage[0];
+            const savedMsg = newMessage[0];
+            savedMsg.receiverId = receiverId; // Add receiverId for server.js to use
+            return savedMsg;
         } catch (error) {
             console.error('Error saving message:', error);
             throw error; // Let the socket logic handle it
+        }
+    },
+
+    /**
+     * Updates status for a single message.
+     */
+    updateMessageStatus: async (messageId, status) => {
+        try {
+            await pool.execute('UPDATE chat_messages SET status = ? WHERE id = ?', [status, messageId]);
+            return true;
+        } catch (error) {
+            console.error('Error updating message status:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Marks all messages in a swap received by user as seen.
+     */
+    markMessagesAsSeen: async (swapId, userId) => {
+        try {
+            await pool.execute(
+                'UPDATE chat_messages SET status = "seen" WHERE swap_id = ? AND sender_id != ? AND status != "seen"',
+                [swapId, userId]
+            );
+            return true;
+        } catch (error) {
+            console.error('Error marking messages as seen:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Gets participants for a swap.
+     */
+    getSwapParticipants: async (swapId) => {
+        try {
+            const [rows] = await pool.execute('SELECT user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
+            return rows.length > 0 ? rows[0] : null;
+        } catch (error) {
+            console.error('Error getting swap participants:', error);
+            return null;
         }
     }
 };

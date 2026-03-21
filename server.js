@@ -31,18 +31,23 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Chat Room Join
+    // FORCE correct room joining
+    socket.on("joinRoom", (swapId) => {
+        socket.join(swapId);
+        console.log("User joined room:", swapId, socket.id);
+    });
+
+    // Legacy support for join_swap_room
     socket.on('join_swap_room', (swapId) => {
         if (swapId) {
-            socket.join(`swap_${swapId}`);
             socket.join(swapId);
-            console.log(`Socket ${socket.id} joined chat room swap_${swapId}`);
+            socket.join(`swap_${swapId}`);
         }
     });
 
     // Real-time Chat Messaging
     socket.on('send_message', async (data) => {
-        const { swapId, senderId, message } = data;
+        const { swapId, senderId, message, clientMsgId } = data; // Added clientMsgId
         if (!swapId || !senderId || !message) return;
 
         try {
@@ -52,23 +57,49 @@ io.on('connection', (socket) => {
             
             if (savedMessageObject) {
                 const messageData = {
+                    id: savedMessageObject.id,
+                    clientMsgId: clientMsgId, // Include clientMsgId for sender sync
                     swapId: savedMessageObject.swap_id,
                     senderId: savedMessageObject.sender_id,
                     senderName: savedMessageObject.sender_name,
                     message: savedMessageObject.message,
-                    timestamp: savedMessageObject.created_at
+                    timestamp: savedMessageObject.created_at,
+                    status: savedMessageObject.status
                 };
-
-                // Broadcast the message back to everyone in the room using the new event name
-                // Also ensures the sender gets it so they see it instantly
+                // DEBUG
+                console.log("Emitting to room:", swapId);
+                
                 io.to(swapId).emit("newMessage", messageData);
-
-                // Keep legacy event for compatibility if needed elsewhere
-                io.to(`swap_${swapId}`).emit('receive_message', savedMessageObject);
             }
         } catch (error) {
             console.error('Socket send_message error:', error);
             // Optionally emit an error event back to sender
+        }
+    });
+
+    socket.on("messageDelivered", async (data) => {
+        const { messageId, swapId } = data;
+        if (!messageId || !swapId) return;
+        const chatController = require('./controllers/chatController');
+        const success = await chatController.updateMessageStatus(messageId, 'delivered');
+        if (success) {
+            io.to(swapId).emit("messageStatusUpdate", {
+                messageId: messageId,
+                status: 'delivered'
+            });
+        }
+    });
+
+    socket.on("messageSeen", async (data) => {
+        const { swapId, userId, messageId } = data; // Usually need messageId
+        if (!swapId || !userId) return;
+        const chatController = require('./controllers/chatController');
+        const success = await chatController.markMessagesAsSeen(swapId, userId);
+        if (success && messageId) {
+            io.to(swapId).emit("messageStatusUpdate", {
+                messageId: messageId,
+                status: 'seen'
+            });
         }
     });
 

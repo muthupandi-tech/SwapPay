@@ -859,3 +859,38 @@ exports.confirmPartnerSelection = async (req, res) => {
         res.status(500).json({ error: 'Failed to confirm partners.' });
     }
 };
+
+// Create a Swap Feed API
+exports.getSwapFeed = async (req, res) => {
+    const userId = req.session.userId;
+    if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+        const query = `
+SELECT 
+  s.id,
+  s.user_id,
+  u.name,
+  s.amount,
+  s.type,
+  s.status,
+  s.created_at
+FROM swaps s
+JOIN users u ON s.user_id = u.id
+WHERE s.status IN ('ACTIVE', 'PENDING', 'OPEN')
+-- AND s.user_id != currentUser
+ORDER BY s.created_at DESC;
+`;
+        const [rows] = await promisePool.execute(query);
+        console.log("Feed query result:", rows);
+        res.status(200).json({ success: true, swaps: rows });
+    } catch (error) {
+        console.error("Feed API Error:", error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+    }
+};

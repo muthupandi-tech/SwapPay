@@ -28,6 +28,7 @@ router.get('/stats', swapController.getDashboardStats);
 router.get('/active', swapController.getActiveSwaps);
 router.get('/matched', swapController.getMatchedSwaps);
 router.get('/completed', swapController.getCompletedSwaps);
+router.get('/feed', swapController.getSwapFeed);
 router.get('/notifications', swapController.getNotifications);
 router.post('/notifications/read/:id', swapController.markNotificationRead);
 
