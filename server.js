@@ -54,7 +54,7 @@ io.on('connection', (socket) => {
             // Validate and save message into database via controller
             const chatController = require('./controllers/chatController');
             const savedMessageObject = await chatController.saveMessage(swapId, senderId, message);
-            
+
             if (savedMessageObject) {
                 const messageData = {
                     id: savedMessageObject.id,
@@ -68,7 +68,7 @@ io.on('connection', (socket) => {
                 };
                 // DEBUG
                 console.log("Emitting to room:", swapId);
-                
+
                 io.to(swapId).emit("newMessage", messageData);
             }
         } catch (error) {
@@ -104,11 +104,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on("typing", (data) => {
-      socket.to(data.swapId).emit("userTyping", data.senderId)
+        socket.to(data.swapId).emit("userTyping", data.senderId)
     })
 
     socket.on("stopTyping", (data) => {
-      socket.to(data.swapId).emit("userStopTyping", data.senderId)
+        socket.to(data.swapId).emit("userStopTyping", data.senderId)
     })
 
     socket.on('disconnect', () => {
@@ -230,4 +230,19 @@ server.listen(PORT, () => {
     // Initialize Smart Automated Email Notification System
     const { startCronService } = require('./services/cronService');
     startCronService();
+});
+
+// Initialize matches table using MySQL
+pool.query(`
+  CREATE TABLE IF NOT EXISTS matches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    swap_id INT,
+    requester_id INT,
+    accepter_id INT,
+    status VARCHAR(50),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`, (err) => {
+    if (err) console.error("Error creating matches table:", err);
+    else console.log("Matches table verified.");
 });

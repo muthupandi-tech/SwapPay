@@ -17,23 +17,32 @@ const chatController = {
             const swapId = req.params.swapId;
             const userId = req.session.userId;
 
-            // 1. Verify the swap exists and the user is involved in it
+            console.log("Fetching chat for swap:", swapId);
+
+            // 1. Verify existence & Auth across both schemas
+            let isAuthorized = false;
+
             const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
-            if (swapRows.length === 0) {
-                return res.status(404).json({ error: 'Swap not found' });
-            }
-            const swap = swapRows[0];
-
-            if (swap.user_id !== userId && swap.matched_user_id !== userId) {
-                return res.status(403).json({ error: 'Unauthorized to view this chat' });
-            }
             
-            // Only allow chatting if the swap is matched
-            if (swap.status !== 'matched') {
-                return res.status(403).json({ error: 'Chat is only available for matched swaps' });
+            if (swapRows.length > 0) {
+                const swap = swapRows[0];
+                if (swap.user_id === userId || swap.matched_user_id === userId) {
+                    isAuthorized = true;
+                }
             }
 
-            // 2. Fetch messages ordered by creation time
+            if (!isAuthorized) {
+                const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+                if (matchRows.length > 0) {
+                    isAuthorized = true;
+                }
+            }
+
+            if (!isAuthorized) {
+                return res.status(403).json({ error: 'Unauthorized to view this chat or swap not found' });
+            }
+
+            // 2. Fetch messages
             const query = `
                 SELECT 
                     cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at, cm.status,
@@ -45,7 +54,7 @@ const chatController = {
             `;
             const [messages] = await pool.execute(query, [swapId]);
 
-            res.json(messages);
+            return res.json({ success: true, messages });
         } catch (error) {
             console.error('Error fetching chat history:', error);
             res.status(500).json({ error: 'Failed to fetch chat history' });
@@ -58,13 +67,20 @@ const chatController = {
      */
     saveMessage: async (swapId, senderId, message) => {
         try {
-            // Check if swap is still active/matched
             const [swapRows] = await pool.execute('SELECT user_id, matched_user_id, status FROM swaps WHERE id = ?', [swapId]);
-            if (swapRows.length === 0 || swapRows[0].status !== 'matched') {
-                return null;
-            }
+            if (swapRows.length === 0) return null;
+            
             const swap = swapRows[0];
-            const receiverId = (swap.user_id === parseInt(senderId)) ? swap.matched_user_id : swap.user_id;
+            let receiverId;
+
+            // Resolve target receiver abstracting across legacy matching logic vs active DB Match system
+            const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            if (matchRows.length > 0) {
+                const match = matchRows[0];
+                receiverId = (match.requester_id === parseInt(senderId)) ? match.accepter_id : match.requester_id;
+            } else {
+                receiverId = (swap.user_id === parseInt(senderId)) ? swap.matched_user_id : swap.user_id;
+            }
 
 
             // Insert

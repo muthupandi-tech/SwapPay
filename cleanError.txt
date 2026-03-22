@@ -1,0 +1,11 @@
+[
+  "Error creating/matching swap:",
+  {
+    "message": "Data truncated for column 'status' at row 1",
+    "code": "WARN_DATA_TRUNCATED",
+    "errno": 1265,
+    "sql": "UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = 'matched', NOW(), match_time) WHERE id = ?",
+    "sqlState": "01000",
+    "sqlMessage": "Data truncated for column 'status' at row 1"
+  }
+]

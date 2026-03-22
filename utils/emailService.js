@@ -227,7 +227,54 @@ async function sendPartialMatchEmail(toEmail, chunkAmt, remainingAmt, partnerNam
 }
 
 /**
- * 2. Swap Completed Email Template
+ * 2. Swap Pending Confirmation Email Template
+ */
+async function sendPendingConfirmationEmail(toEmail, partnerName, amount, type, location, time) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const displayType = type === 'need_cash' ? 'Cash Swap' : 'UPI Swap';
+
+    const content = `
+        <h3 style="color: #60a5fa; margin-top: 0;">Partner Awaiting Confirmation</h3>
+        <p>Your swap partner, <strong>${partnerName}</strong>, has marked your recent exchange as completed!</p>
+        
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Swap Details:</strong></p>
+            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                <li><strong>Amount:</strong> ₹${amount}</li>
+                <li><strong>Type:</strong> ${displayType}</li>
+                <li><strong>Location:</strong> ${location || 'Campus Area'}</li>
+                <li><strong>Posted Time:</strong> ${time}</li>
+            </ul>
+        </div>
+
+        <p>Please log in to your dashboard to confirm the completion and finalize the swap process.</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="http://localhost:3000/dashboard" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Confirm Completion</a>
+        </div>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Notifications" <${senderEmail}>`,
+        to: toEmail,
+        subject: "⏳ Action Required: Confirm Swap Completion",
+        html: getEmailTemplateWrapper("Awaiting Confirmation", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Pending Confirmation Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send email to ${toEmail}:`, error);
+    }
+}
+
+/**
+ * 3. Swap Completed Email Template
  */
 async function sendSwapCompletedEmail(toEmail, partnerName, amount) {
     if (!(await isEmailNotificationEnabled())) return;
@@ -452,6 +499,7 @@ async function sendMultiplePartnersAvailableEmail(toEmail, requiredAmount, partn
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
+    sendPendingConfirmationEmail,
     sendSwapCompletedEmail,
     sendRatingReceivedEmail,
     sendPendingReminderEmail,

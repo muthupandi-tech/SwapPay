@@ -39,7 +39,7 @@ exports.createSwap = async (req, res) => {
 
         // 1. Insert the PARENT swap request initially
         const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'open', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
+        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
         const newParentSwapId = result.insertId;
 
         const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
@@ -54,7 +54,7 @@ exports.createSwap = async (req, res) => {
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as partner_rating
                 FROM swaps s 
                 JOIN users u ON s.user_id = u.id
-                WHERE s.status = 'open' 
+                WHERE s.status = 'active' 
                   AND s.type = ? 
                   AND s.user_id != ? 
                   AND s.remaining_amount > 0
@@ -81,7 +81,7 @@ exports.createSwap = async (req, res) => {
                     // Force the while loop to perform the standard auto-match mechanism
                     autoMatchProceed = true;
                 } else {
-                    // Do not auto-match. Just email the user the options and leave swap marked open.
+                    // Do not auto-match. Just email the user the options and leave swap marked active.
                     let emailPartners = matchRows.map(r => ({
                         name: r.partner_name,
                         amount: r.remaining_amount,
@@ -108,12 +108,12 @@ exports.createSwap = async (req, res) => {
         // --- AUTO-MATCHING CROWD-SWAP LOGIC ---
         if (autoMatchProceed) {
             while (remainingNeeded > 0) {
-                // Find an opposite open swap.
+                // Find an opposite active swap.
                 // If our swap allows partial, we can match any other partial-allowed swap, OR fully absorb a non-partial swap.
                 // If our swap DOES NOT allow partial, we can only match if the other swap's remaining amount exactly equals what we need OR is greater (if they allow partial).
                 let candidateQuery = `
                     SELECT * FROM swaps 
-                    WHERE status = 'open' 
+                    WHERE status = 'active' 
                       AND type = ? 
                       AND user_id != ? 
                       AND remaining_amount > 0
@@ -145,7 +145,7 @@ exports.createSwap = async (req, res) => {
 
                 // Update Candidate Parent Swap
                 const newCandidateRemaining = candidateRemaining - chunkAmount;
-                const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'open';
+                const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
                 await promisePool.execute(
                     'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
@@ -176,7 +176,7 @@ exports.createSwap = async (req, res) => {
             }
 
             // Update Our Parent Swap based on what was matched
-            const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'open';
+            const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
             await promisePool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
                 [remainingNeeded, finalParentStatus, finalParentStatus, newParentSwapId]
@@ -263,13 +263,13 @@ exports.getNearbySwaps = async (req, res) => {
     }
 
     try {
-        // Fetch open swaps and join with users table to get the requester's name AND average rating
+        // Fetch active swaps and join with users table to get the requester's name AND average rating
         const query = `
             SELECT s.id, s.type, s.amount, s.location, s.created_at, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
-            WHERE s.status = 'open' AND s.user_id != ? 
+            WHERE s.status = 'active' AND s.user_id != ? 
             ORDER BY s.created_at DESC
         `;
         const [rows] = await promisePool.execute(query, [userId]);
@@ -288,14 +288,17 @@ exports.getNearbySwaps = async (req, res) => {
 // Complete a swap request
 exports.completeSwap = async (req, res) => {
     const swapId = req.params.id;
-    const userId = req.session.userId;
+    const userId = req.user?.id || req.session?.userId || req.body?.userId;
+
+    console.log("User:", userId);
+    console.log("Swap ID:", swapId);
 
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized. Please log in.' });
     }
 
     try {
-        const checkQuery = 'SELECT status, user_id, matched_user_id, creator_completed, acceptor_completed, amount, parent_swap_id, matched_parent_swap_id FROM swaps WHERE id = ?';
+        const checkQuery = 'SELECT * FROM swaps WHERE id = ?';
         const [rows] = await promisePool.execute(checkQuery, [swapId]);
 
         if (rows.length === 0) {
@@ -303,33 +306,52 @@ exports.completeSwap = async (req, res) => {
         }
 
         const swap = rows[0];
+        console.log("Extracted swap status:", swap.status);
 
-        if (swap.status !== 'matched') {
+        if (swap.status.toLowerCase() === 'completed') {
+            return res.status(200).json({ success: true, status: 'completed' });
+        }
+
+        if (swap.status.toLowerCase() !== 'matched' && swap.status.toLowerCase() !== 'pending_confirmation') {
             return res.status(400).json({ error: 'Only matched swaps can be completed.' });
         }
 
-        // Allow either the creator or the matched user to complete
-        if (swap.user_id !== userId && swap.matched_user_id !== userId) {
+        // Allow either the creator or the matched user natively or via Matches table
+        let isAuthorized = false;
+        if (swap.user_id === userId || swap.matched_user_id === userId) {
+            isAuthorized = true;
+        } else {
+            const [matchRows] = await promisePool.execute('SELECT * FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+            if (matchRows.length > 0) isAuthorized = true;
+        }
+
+        if (!isAuthorized) {
             return res.status(403).json({ error: 'You are not authorized to complete this swap.' });
         }
 
-        // Determine who is clicking complete
-        const isCreator = (swap.user_id === userId);
+        let completedBy = [];
+        try {
+            completedBy = JSON.parse(swap.completed_by || '[]');
+        } catch (e) {
+            completedBy = [];
+        }
 
-        // Update the specific flag
-        const updateFlagQuery = isCreator
-            ? 'UPDATE swaps SET creator_completed = TRUE WHERE id = ?'
-            : 'UPDATE swaps SET acceptor_completed = TRUE WHERE id = ?';
-        await promisePool.execute(updateFlagQuery, [swapId]);
+        if (!completedBy.includes(userId)) {
+            completedBy.push(userId);
+        }
 
-        // Re-fetch to check if BOTH are now true
-        const [updatedRows] = await promisePool.execute(checkQuery, [swapId]);
-        const updatedSwap = updatedRows[0];
+        let newStatus = swap.status;
+        if (completedBy.length >= 2) {
+            newStatus = 'completed';
+        } else {
+            newStatus = 'pending_confirmation';
+        }
 
-        if (updatedSwap.creator_completed && updatedSwap.acceptor_completed) {
+        await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+        await promisePool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
+
+        if (newStatus === 'completed') {
             // Both have completed! Finalize it.
-            const updateFinalQuery = 'UPDATE swaps SET status = ? WHERE id = ?';
-            await promisePool.execute(updateFinalQuery, ['completed', swapId]);
 
             // Notify BOTH users
             const msg = `Swap exchange marked as completed! Don't forget to rate your partner.`;
@@ -389,14 +411,30 @@ exports.completeSwap = async (req, res) => {
                 }
             }
 
-            return res.status(200).json({ message: 'Swap marked as completed by both parties.' });
         } else {
             // Only one has completed, waiting for partner
-            return res.status(200).json({ message: 'Marked as completed. Waiting for partner to confirm.' });
+            const partnerId = (swap.user_id === userId) ? swap.matched_user_id : swap.user_id;
+
+            if (partnerId) {
+                try {
+                    const [meRows] = await promisePool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+                    const [partnerRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [partnerId]);
+
+                    if (meRows.length > 0 && partnerRows.length > 0) {
+                        const { sendPendingConfirmationEmail } = require('../utils/emailService');
+                        const postedTime = new Date(swap.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true, dateStyle: 'medium', timeStyle: 'short' });
+                        await sendPendingConfirmationEmail(partnerRows[0].email, meRows[0].name, swap.amount, swap.type, swap.location, postedTime);
+                    }
+                } catch (err) {
+                    console.error('Error sending pending confirmation email:', err);
+                }
+            }
+
+            return res.status(200).json({ success: true, status: 'pending_confirmation' });
         }
     } catch (error) {
-        console.error('Error completing swap:', error);
-        res.status(500).json({ error: 'An error occurred while completing the swap.' });
+        console.error('Complete Swap Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
@@ -413,7 +451,7 @@ exports.getDashboardStats = async (req, res) => {
             SELECT COUNT(*) AS count 
             FROM swaps 
             WHERE (user_id = ? OR matched_user_id = ?) 
-              AND status IN ('open', 'matched')
+              AND status IN ('active', 'matched', 'pending_confirmation')
         `;
         const [activeRows] = await promisePool.execute(activeSwapsQuery, [userId, userId]);
         const activeSwaps = activeRows[0].count;
@@ -472,7 +510,7 @@ exports.getActiveSwaps = async (req, res) => {
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE s.user_id = ? AND s.status = 'open'
+            WHERE s.user_id = ? AND s.status = 'active'
             ORDER BY s.created_at DESC
         `;
         const [rows] = await promisePool.execute(query, [userId]);
@@ -500,39 +538,74 @@ exports.getActiveSwaps = async (req, res) => {
 
 // Get Matched Swaps
 exports.getMatchedSwaps = async (req, res) => {
-    const userId = req.session.userId;
-    if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized.' });
-    }
-
     try {
-        const query = `
-            SELECT s.*,
-            u1.name as creator_name, u2.name as matched_name,
-            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
-            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
-            FROM swaps s 
-            LEFT JOIN users u1 ON s.user_id = u1.id 
-            LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'matched'
-            ORDER BY s.created_at DESC
+        const currentUserId = req.user?.id || req.body?.userId || req.session?.userId;
+        if (!currentUserId) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+        }
+
+        const query1 = `
+SELECT 
+  m.id AS match_id,
+  m.swap_id,
+  m.requester_id,
+  m.accepter_id,
+  m.status,
+  m.created_at AS matched_time,
+  s.amount,
+  s.type,
+  s.created_at AS posted_time,
+  s.location,
+  u1.name AS requester_name,
+  u2.name AS accepter_name
+FROM matches m
+JOIN swaps s ON m.swap_id = s.id
+JOIN users u1 ON m.requester_id = u1.id
+JOIN users u2 ON m.accepter_id = u2.id
+WHERE 
+  (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confirmation')
+  AND (m.requester_id = ? OR m.accepter_id = ?)
+ORDER BY m.created_at DESC;
         `;
-        const [rows] = await promisePool.execute(query, [userId, userId]);
+        
+        const [rows1] = await promisePool.execute(query1, [currentUserId, currentUserId]);
 
-        const swapsWithContext = rows.map(swap => {
-            return {
-                ...swap,
-                isCreator: swap.user_id === userId,
-                otherPartyName: swap.user_id === userId ? swap.matched_name : swap.creator_name,
-                otherPartyId: swap.user_id === userId ? swap.matched_user_id : swap.user_id,
-                otherPartyRating: swap.user_id === userId ? swap.matched_rating : swap.creator_rating
-            };
+        const query2 = `
+SELECT 
+  s.id AS match_id,
+  s.id AS swap_id,
+  s.user_id AS requester_id,
+  s.matched_user_id AS accepter_id,
+  s.status,
+  s.created_at AS posted_time,
+  s.created_at AS matched_time,
+  s.amount,
+  s.type,
+  s.location,
+  u1.name AS requester_name,
+  u2.name AS accepter_name
+FROM swaps s
+LEFT JOIN users u1 ON s.user_id = u1.id
+LEFT JOIN users u2 ON s.matched_user_id = u2.id
+WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confirmation')
+AND (s.user_id = ? OR s.matched_user_id = ?)
+ORDER BY s.created_at DESC;
+        `;
+        const [rows2] = await promisePool.execute(query2, [currentUserId, currentUserId]);
+
+        const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
+        const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
+
+        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
+
+        console.log("Matched rows:", matches);
+        res.status(200).json({ success: true, swaps: matches, currentUserId });
+    } catch (err) {
+        console.error("Matched API Error:", err);
+        return res.status(500).json({
+            error: "Failed to load matched swaps",
+            details: err.message
         });
-
-        res.status(200).json({ success: true, swaps: swapsWithContext });
-    } catch (error) {
-        console.error('Error fetching matched swaps:', error);
-        res.status(500).json({ error: 'An error occurred while fetching matched swaps.' });
     }
 };
 
@@ -602,12 +675,33 @@ exports.rateSwap = async (req, res) => {
             return res.status(400).json({ error: 'Only completed swaps can be rated.' });
         }
 
-        if (swap.user_id !== userId && swap.matched_user_id !== userId) {
+        // 1. Resolve Authorization and Opposite User ID targeting DB matches vs legacy swaps
+        let isAuthorized = false;
+        let ratedUserId = null;
+
+        if (swap.user_id === userId || swap.matched_user_id === userId) {
+            isAuthorized = true;
+            ratedUserId = (swap.user_id === userId) ? swap.matched_user_id : swap.user_id;
+        }
+
+        if (!isAuthorized || !ratedUserId) {
+            const [matchRows] = await promisePool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            if (matchRows.length > 0) {
+                const match = matchRows[0];
+                if (match.requester_id === userId || match.accepter_id === userId) {
+                    isAuthorized = true;
+                    ratedUserId = (match.requester_id === userId) ? match.accepter_id : match.requester_id;
+                }
+            }
+        }
+
+        if (!isAuthorized) {
             return res.status(403).json({ error: 'You are not authorized to rate this swap.' });
         }
 
-        // Determine the ID of the user being rated (the "other" user)
-        const ratedUserId = swap.user_id === userId ? swap.matched_user_id : swap.user_id;
+        if (!ratedUserId) {
+            return res.status(500).json({ error: 'Failed to resolve partner ID to rate.' });
+        }
 
         // Check if user already rated this swap
         const ratingCheckQuery = 'SELECT id FROM ratings WHERE swap_id = ? AND rater_user_id = ?';
@@ -716,7 +810,7 @@ exports.getPartners = async (req, res) => {
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as partner_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id
-            WHERE s.status = 'open' 
+            WHERE s.status = 'active' 
               AND s.type = ? 
               AND s.user_id != ? 
               AND s.remaining_amount > 0
@@ -756,7 +850,7 @@ exports.confirmPartnerSelection = async (req, res) => {
         if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
 
         const mySwap = swapRows[0];
-        if (mySwap.status !== 'open') return res.status(400).json({ error: 'Swap is no longer open.' });
+        if (mySwap.status !== 'active') return res.status(400).json({ error: 'Swap is no longer active.' });
 
         let remainingNeeded = parseFloat(mySwap.remaining_amount);
         let selectionGroupId = 'GRP-' + Date.now();
@@ -769,7 +863,7 @@ exports.confirmPartnerSelection = async (req, res) => {
 
             if (remainingNeeded <= 0) break; // Safety net
 
-            const [pRows] = await promisePool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "open"', [candidateId]);
+            const [pRows] = await promisePool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "active"', [candidateId]);
             if (pRows.length === 0) continue; // Partner was taken
 
             const candidateSwap = pRows[0];
@@ -779,7 +873,7 @@ exports.confirmPartnerSelection = async (req, res) => {
             if (actualChunk <= 0) continue;
 
             const newCandidateRemaining = candidateRemaining - actualChunk;
-            const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'open';
+            const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
             await promisePool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time), is_selected = TRUE, selection_group_id = ?, partner_priority_rank = ? WHERE id = ?',
@@ -804,7 +898,7 @@ exports.confirmPartnerSelection = async (req, res) => {
             remainingNeeded -= actualChunk;
         }
 
-        const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'open';
+        const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
         await promisePool.execute(
             'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
             [remainingNeeded, finalParentStatus, finalParentStatus, swapId]
@@ -876,21 +970,102 @@ SELECT
   s.amount,
   s.type,
   s.status,
+  s.location,
   s.created_at
 FROM swaps s
 JOIN users u ON s.user_id = u.id
-WHERE s.status IN ('ACTIVE', 'PENDING', 'OPEN')
--- AND s.user_id != currentUser
+WHERE LCASE(s.status) = 'active' AND s.user_id != ?
 ORDER BY s.created_at DESC;
 `;
-        const [rows] = await promisePool.execute(query);
-        console.log("Feed query result:", rows);
+        const [rows] = await promisePool.execute(query, [userId]);
+        console.log(`Feed query for user ${userId} returned ${rows.length} rows`);
+        if (rows.length > 0) console.log("First feed item user_id:", rows[0].user_id);
         res.status(200).json({ success: true, swaps: rows });
     } catch (error) {
         console.error("Feed API Error:", error);
         res.status(500).json({
           success: false,
           error: error.message
+        });
+    }
+};
+
+// Accept a Swap from the Feed
+exports.acceptSwap = async (req, res) => {
+    try {
+        console.log("---- ACCEPT SWAP START ----");
+        console.log("Request body:", req.body);
+
+        const { swapId } = req.body;
+
+        const currentUserId = req.user?.id || req.body.userId || req.session?.userId;
+
+        console.log("Current User:", currentUserId);
+
+        if (!swapId) {
+            return res.status(400).json({ error: "swapId missing" });
+        }
+
+        if (!currentUserId) {
+            return res.status(401).json({ error: "User not authenticated" });
+        }
+
+        const [swapRows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        
+        const swap = swapRows.length > 0 ? swapRows[0] : null;
+
+        console.log("Swap found:", swap);
+
+        if (!swap) {
+            return res.status(404).json({ error: "Swap not found" });
+        }
+
+        if (Number(swap.user_id) === Number(currentUserId)) {
+            console.log("Blocking self-acceptance:", swap.user_id, currentUserId);
+            return res.status(400).json({
+                error: "Cannot accept your own swap"
+            });
+        }
+
+        const validStatuses = ['active', 'open', 'pending'];
+        const currentStatus = swap.status ? swap.status.toLowerCase() : '';
+        if (!validStatuses.includes(currentStatus)) {
+            console.log("Blocking inactive status:", swap.status);
+            return res.status(400).json({
+                error: "Swap already matched or inactive"
+            });
+        }
+
+        console.log("Inserting match...");
+
+        await promisePool.execute(`
+          INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
+          VALUES (?, ?, ?, ?, NOW())
+        `, [
+          swapId,
+          swap.user_id,
+          currentUserId,
+          "matched"
+        ]);
+
+        console.log("Updating swap...");
+
+        await promisePool.execute(`
+          UPDATE swaps
+          SET status = 'matched',
+              matched_user_id = ?
+          WHERE id = ?
+        `, [currentUserId, swapId]);
+
+        console.log("SUCCESS");
+
+        res.json({ success: true, message: "Swap matched successfully" });
+
+    } catch (err) {
+        console.error("❌ ACCEPT ERROR:", err);
+        res.status(500).json({
+            error: "Internal server error",
+            details: err.message
         });
     }
 };
