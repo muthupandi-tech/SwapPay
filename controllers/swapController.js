@@ -42,6 +42,20 @@ exports.createSwap = async (req, res) => {
         const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
         const newParentSwapId = result.insertId;
 
+        // --- NEW: Respect User's auto_match preference ---
+        const [userRows] = await promisePool.execute('SELECT auto_match FROM users WHERE id = ?', [userId]);
+        const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
+
+        if (!userAutoMatch) {
+            console.log(`Auto-match disabled for user ${userId}. Skipping matching logic.`);
+            return res.status(201).json({
+                success: true,
+                message: 'Swap request created successfully. (Auto-matching is disabled per your profile setting)',
+                swapId: newParentSwapId,
+                isAutoMatched: false
+            });
+        }
+
         const oppositeType = type === 'need_cash' ? 'need_upi' : 'need_cash';
         let remainingNeeded = parsedAmount;
         let matchedChunks = [];
@@ -265,11 +279,11 @@ exports.getNearbySwaps = async (req, res) => {
     try {
         // Fetch active swaps and join with users table to get the requester's name AND average rating
         const query = `
-            SELECT s.id, s.type, s.amount, s.location, s.created_at, u.name as requester_name,
+            SELECT s.id, s.type, s.amount, s.location, s.created_at, s.is_edited, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
-            WHERE s.status = 'active' AND s.user_id != ? 
+            WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != ? 
             ORDER BY s.created_at DESC
         `;
         const [rows] = await promisePool.execute(query, [userId]);
@@ -451,7 +465,7 @@ exports.getDashboardStats = async (req, res) => {
             SELECT COUNT(*) AS count 
             FROM swaps 
             WHERE (user_id = ? OR matched_user_id = ?) 
-              AND status IN ('active', 'matched', 'pending_confirmation')
+              AND status IN ('active', 'open', 'matched', 'pending_confirmation')
         `;
         const [activeRows] = await promisePool.execute(activeSwapsQuery, [userId, userId]);
         const activeSwaps = activeRows[0].count;
@@ -510,7 +524,7 @@ exports.getActiveSwaps = async (req, res) => {
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE s.user_id = ? AND s.status = 'active'
+            WHERE s.user_id = ? AND (s.status = 'active' OR s.status = 'open')
             ORDER BY s.created_at DESC
         `;
         const [rows] = await promisePool.execute(query, [userId]);
@@ -550,10 +564,8 @@ SELECT
   m.swap_id,
   m.requester_id,
   m.accepter_id,
-  m.status,
-  m.created_at AS matched_time,
-  s.amount,
-  s.type,
+  s.status,
+  s.is_edited,
   s.created_at AS posted_time,
   s.location,
   u1.name AS requester_name,
@@ -577,6 +589,7 @@ SELECT
   s.user_id AS requester_id,
   s.matched_user_id AS accepter_id,
   s.status,
+  s.is_edited,
   s.created_at AS posted_time,
   s.created_at AS matched_time,
   s.amount,
@@ -942,6 +955,13 @@ exports.confirmPartnerSelection = async (req, res) => {
             }
         }
 
+        // Reset notification state for the requester (current user)
+        console.log("Resetting notification state for user after partner selection:", userId);
+        await promisePool.execute(
+            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+            [userId]
+        );
+
         res.status(200).json({
             message: 'Partners successfully confirmed and locked.',
             lockedChunks: matchedChunks.length,
@@ -962,25 +982,56 @@ exports.getSwapFeed = async (req, res) => {
     }
 
     try {
+        // 1. Fetch user's auto_match preference
+        const [userRows] = await promisePool.execute('SELECT auto_match FROM users WHERE id = ?', [userId]);
+        const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
+
+        // 2. Fetch user's active swaps to identify potential "Best Matches"
+        const [myActiveSwaps] = await promisePool.execute(
+            'SELECT amount, type FROM swaps WHERE user_id = ? AND (status = "active" OR status = "open")',
+            [userId]
+        );
+
+        // 3. Fetch all active swaps from other users
         const query = `
-SELECT 
-  s.id,
-  s.user_id,
-  u.name,
-  s.amount,
-  s.type,
-  s.status,
-  s.location,
-  s.created_at
-FROM swaps s
-JOIN users u ON s.user_id = u.id
-WHERE LCASE(s.status) = 'active' AND s.user_id != ?
-ORDER BY s.created_at DESC;
-`;
+            SELECT 
+              s.id,
+              s.user_id,
+              u.name,
+              s.amount,
+              s.type,
+              s.status,
+  s.is_edited,
+              s.location,
+              s.created_at
+            FROM swaps s
+            JOIN users u ON s.user_id = u.id
+            WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open') AND s.user_id != ?
+            ORDER BY s.created_at DESC;
+        `;
         const [rows] = await promisePool.execute(query, [userId]);
-        console.log(`Feed query for user ${userId} returned ${rows.length} rows`);
-        if (rows.length > 0) console.log("First feed item user_id:", rows[0].user_id);
-        res.status(200).json({ success: true, swaps: rows });
+
+        // 4. Transform and Filter
+        const enrichedSwaps = rows.map(swap => {
+            const swapAmount = parseFloat(swap.amount);
+            const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+            
+            // Check if this swap is a "Best Match" (exact amount and compatible type)
+            const isBestMatch = myActiveSwaps.some(mySwap => 
+                parseFloat(mySwap.amount) === swapAmount && mySwap.type === oppositeType
+            );
+
+            return { ...swap, isBestMatch };
+        });
+
+        let finalSwaps = enrichedSwaps;
+        if (userAutoMatch) {
+            // IF auto_match = ON, do NOT show exact matches in feed
+            finalSwaps = enrichedSwaps.filter(s => !s.isBestMatch);
+        }
+
+        console.log(`Feed query for user ${userId} returned ${finalSwaps.length} rows (Auto-match: ${userAutoMatch})`);
+        res.status(200).json({ success: true, swaps: finalSwaps });
     } catch (error) {
         console.error("Feed API Error:", error);
         res.status(500).json({
@@ -1048,14 +1099,45 @@ exports.acceptSwap = async (req, res) => {
           "matched"
         ]);
 
-        console.log("Updating swap...");
-
+        console.log("Updating requester's swap...");
         await promisePool.execute(`
           UPDATE swaps
           SET status = 'matched',
               matched_user_id = ?
           WHERE id = ?
         `, [currentUserId, swapId]);
+
+        // --- NEW: Also match the ACCEPTER'S active swap if it exists and matches ---
+        console.log("Checking for a matching active swap for the accepter (User B)...");
+        const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+        
+        // Find the BEST matching active swap for the current user
+        const [myMatchRows] = await promisePool.execute(`
+            SELECT id FROM swaps 
+            WHERE user_id = ? 
+              AND (status = 'active' OR status = 'open') 
+              AND type = ? 
+              AND amount = ? 
+            ORDER BY created_at ASC 
+            LIMIT 1
+        `, [currentUserId, oppositeType, swap.amount]);
+
+        if (myMatchRows.length > 0) {
+            const mySwapId = myMatchRows[0].id;
+            console.log(`Matching accepter's swap ${mySwapId} with requester's swap ${swapId}`);
+            await promisePool.execute(`
+                UPDATE swaps 
+                SET status = 'matched', 
+                    matched_user_id = ? 
+                WHERE id = ?
+            `, [swap.user_id, mySwapId]);
+        }
+
+        console.log("Resetting notification state for user:", currentUserId);
+        await promisePool.execute(
+            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+            [currentUserId]
+        );
 
         console.log("SUCCESS");
 
@@ -1067,5 +1149,110 @@ exports.acceptSwap = async (req, res) => {
             error: "Internal server error",
             details: err.message
         });
+    }
+};
+
+// Delete a swap request
+exports.deleteSwap = async (req, res) => {
+    const swapId = req.params.id;
+    const userId = req.session.userId;
+
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized. Please log in.' });
+    }
+
+    try {
+        // 1. Find the swap
+        const [rows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Swap request not found.' });
+        }
+
+        const swap = rows[0];
+
+        // 2. Ensure only owner can delete
+        if (Number(swap.user_id) !== Number(userId)) {
+            return res.status(403).json({ success: false, error: 'You are not authorized to delete this swap.' });
+        }
+
+        // 3. Allow delete only if status is 'active'
+        if (swap.status !== 'active') {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot delete matched or completed swaps.'
+            });
+        }
+
+        // 4. Perform deletion
+        await promisePool.execute('DELETE FROM swaps WHERE id = ?', [swapId]);
+
+        res.json({ success: true, message: 'Swap deleted successfully.' });
+
+    } catch (error) {
+        console.error('Delete Swap Error:', error);
+        res.status(500).json({ success: false, error: 'An error occurred while deleting the swap.' });
+    }
+};
+// Update an active swap request
+exports.updateSwap = async (req, res) => {
+    const swapId = req.params.id;
+    const userId = req.session.userId;
+    const { amount, location } = req.body;
+
+    if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized. Please log in.' });
+    }
+
+    if (!amount || !location) {
+        return res.status(400).json({ success: false, error: 'Missing required fields: amount, location' });
+    }
+
+    try {
+        // 1. Find the swap
+        const [rows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Swap request not found.' });
+        }
+
+        const swap = rows[0];
+
+        // 2. Ensure only owner can edit
+        if (Number(swap.user_id) !== Number(userId)) {
+            return res.status(403).json({ success: false, error: 'You are not authorized to edit this swap.' });
+        }
+
+        // 3. Allow edit only if status is 'active' or 'open'
+        if (swap.status !== 'active' && swap.status !== 'open') {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot edit matched or completed swaps.'
+            });
+        }
+
+        // 4. Complexity Check: If partially matched, editing is blocked for safety
+        if (parseFloat(swap.remaining_amount) !== parseFloat(swap.total_amount)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot edit partially matched swaps. Delete and create a new request if needed.'
+            });
+        }
+
+        // 5. Update the swap
+        // We update amount, total_amount, remaining_amount
+        // created_at is updated to NOW() to "update the posted time"
+        // is_edited is set to TRUE for the frontend label
+        await promisePool.execute(`
+            UPDATE swaps 
+            SET amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
+            WHERE id = ?
+        `, [amount, amount, amount, location, swapId]);
+
+        res.json({ success: true, message: 'Swap updated successfully.' });
+
+    } catch (error) {
+        console.error('Update Swap Error:', error);
+        res.status(500).json({ success: false, error: 'An error occurred while updating the swap.' });
     }
 };

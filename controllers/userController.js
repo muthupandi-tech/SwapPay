@@ -23,7 +23,7 @@ exports.getProfile = async (req, res) => {
 
         // Fetch User details
         const [userRows] = await promisePool.execute(
-            'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, created_at FROM users WHERE id = ?',
+            'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, created_at FROM users WHERE id = ?',
             [userId]
         );
 
@@ -134,6 +134,32 @@ exports.updateLocation = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating location:', error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+};
+
+exports.updateAutoMatch = async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { autoMatch } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+        }
+
+        if (autoMatch === undefined) {
+            return res.status(400).json({ error: 'autoMatch value is required.' });
+        }
+
+        await promisePool.execute(
+            'UPDATE users SET auto_match = ? WHERE id = ?',
+            [autoMatch ? 1 : 0, userId]
+        );
+
+        res.json({ success: true, message: `Auto-Match turned ${autoMatch ? 'ON' : 'OFF'}.` });
+
+    } catch (error) {
+        console.error('Error updating auto-match:', error);
         res.status(500).json({ error: 'Internal server error.' });
     }
 };

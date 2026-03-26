@@ -496,6 +496,55 @@ async function sendMultiplePartnersAvailableEmail(toEmail, requiredAmount, partn
     }
 }
 
+/**
+ * Smart Notification: Best Match Found Email Template
+ */
+async function sendBestMatchFoundEmail(toEmail, myAmount, partnerName, partnerAmount, partnerType, partnerLocation) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const pTypeLabel = partnerType === 'need_cash' ? 'Needs Cash' : 'Needs UPI';
+
+    const content = `
+        <p>We've found a new, high-quality match for your active swap request of <strong>₹${myAmount}</strong>!</p>
+        
+        <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; overflow: hidden; margin: 20px 0;">
+            <div style="background-color: #f59e0b; color: white; padding: 10px 15px; font-weight: bold;">🔥 Better Match Details</div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a; width: 35%; color: #92400e;"><strong>Potential Partner:</strong></td><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a;">${partnerName}</td></tr>
+                <tr><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a; color: #92400e;"><strong>They Offer:</strong></td><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a; color: #10b981; font-weight: bold;">₹${partnerAmount}</td></tr>
+                <tr><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a; color: #92400e;"><strong>They Need:</strong></td><td style="padding: 12px 15px; border-bottom: 1px solid #fde68a;">${pTypeLabel}</td></tr>
+                <tr><td style="padding: 12px 15px; color: #92400e;"><strong>Meetup Near:</strong></td><td style="padding: 12px 15px;">${partnerLocation}</td></tr>
+            </table>
+        </div>
+        
+        <p>This match is currently active on the platform. Log in now to view it and accept manually!</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="http://localhost:3000/dashboard" style="background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Best Match</a>
+        </div>
+        
+        <p style="font-size: 0.8rem; color: #94a3b8; text-align: center;">You are receiving this because you have auto-match disabled. We only alert you when we find a better score than your last notification!</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Smart Alerts" <${senderEmail}>`,
+        to: toEmail,
+        subject: "🔥 Better Swap Match Found!",
+        html: getEmailTemplateWrapper("Better Match Found", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Smart Notification (Best Match) to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send email to ${toEmail}:`, error);
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
@@ -504,5 +553,6 @@ module.exports = {
     sendRatingReceivedEmail,
     sendPendingReminderEmail,
     sendPartialMatchEmail,
-    sendMultiplePartnersAvailableEmail
+    sendMultiplePartnersAvailableEmail,
+    sendBestMatchFoundEmail
 };

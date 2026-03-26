@@ -37,4 +37,10 @@ router.post('/notifications/read/:id', swapController.markNotificationRead);
 router.get('/partners', swapController.getPartners);
 router.post('/confirmPartners', swapController.confirmPartnerSelection);
 
+// PUT request for editing
+router.put('/:id', swapController.updateSwap);
+
+// DELETE request
+router.delete('/:id', swapController.deleteSwap);
+
 module.exports = router;

@@ -113,7 +113,7 @@ exports.getCurrentUser = async (req, res) => {
                 connectionLimit: 10,
                 queueLimit: 0
             });
-            const [rows] = await pool.execute('SELECT campus_name, block_name FROM users WHERE id = ?', [req.session.userId]);
+            const [rows] = await pool.execute('SELECT campus_name, block_name, auto_match FROM users WHERE id = ?', [req.session.userId]);
             pool.end();
 
             let campus_name = null;
@@ -122,6 +122,7 @@ exports.getCurrentUser = async (req, res) => {
             if (rows.length > 0) {
                 campus_name = rows[0].campus_name;
                 block_name = rows[0].block_name;
+                auto_match = rows[0].auto_match;
             }
 
             return res.json({
@@ -129,7 +130,8 @@ exports.getCurrentUser = async (req, res) => {
                 name: req.session.userName,
                 role: req.session.role,
                 campus_name,
-                block_name
+                block_name,
+                auto_match
             });
         } catch (err) {
             console.error('Error fetching current user location:', err);
