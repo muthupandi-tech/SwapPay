@@ -1198,14 +1198,18 @@ exports.deleteSwap = async (req, res) => {
 exports.updateSwap = async (req, res) => {
     const swapId = req.params.id;
     const userId = req.session.userId;
-    const { amount, location } = req.body;
+    const { amount, location, type } = req.body;
 
     if (!userId) {
         return res.status(401).json({ success: false, error: 'Unauthorized. Please log in.' });
     }
 
-    if (!amount || !location) {
-        return res.status(400).json({ success: false, error: 'Missing required fields: amount, location' });
+    if (!amount || !location || !type) {
+        return res.status(400).json({ success: false, error: 'Missing required fields: amount, location, type' });
+    }
+
+    if (type !== 'need_cash' && type !== 'need_upi') {
+        return res.status(400).json({ success: false, error: 'Invalid swap type.' });
     }
 
     try {
@@ -1240,14 +1244,14 @@ exports.updateSwap = async (req, res) => {
         }
 
         // 5. Update the swap
-        // We update amount, total_amount, remaining_amount
+        // We update type, amount, total_amount, remaining_amount
         // created_at is updated to NOW() to "update the posted time"
         // is_edited is set to TRUE for the frontend label
         await promisePool.execute(`
             UPDATE swaps 
-            SET amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
+            SET type = ?, amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
             WHERE id = ?
-        `, [amount, amount, amount, location, swapId]);
+        `, [type, amount, amount, amount, location, swapId]);
 
         res.json({ success: true, message: 'Swap updated successfully.' });
 

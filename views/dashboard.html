@@ -1191,6 +1191,13 @@
                     <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Location</label>
                     <input type="text" id="editSwapLocation" class="create-input" style="width: 100%; border: 1px solid var(--glass-border); padding: 0.8rem; border-radius: 10px; background: rgba(0,0,0,0.2); color: white;" placeholder="Enter location">
                 </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">I Need</label>
+                    <select id="editSwapType" class="create-input" style="width: 100%; border: 1px solid var(--glass-border); padding: 0.8rem; border-radius: 10px; background: rgba(0,0,0,0.2); color: white;">
+                        <option value="need_cash">Cash (via UPI)</option>
+                        <option value="need_upi">UPI (via Cash)</option>
+                    </select>
+                </div>
                 <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
                     Note: Editing will update the posted time and move your request to the top of the feed.
                 </p>
@@ -1584,7 +1591,7 @@
                         <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Bidirectional Matching Available</div>
                         <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button class="btn-accept-swap" onclick="editSwap(${swap.id}, ${swap.amount}, '${swap.location}')" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-primary); color: var(--accent-primary);">Edit</button>
+                            <button class="btn-accept-swap" onclick="editSwap(${swap.id}, ${swap.amount}, '${swap.location}', '${swap.type}')" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-primary); color: var(--accent-primary);">Edit</button>
                             <button class="btn-accept-swap" onclick="deleteSwap(${swap.id})" style="flex: 1; background: rgba(255, 107, 107, 0.1); border: 1px solid #ff6b6b; color: #ff6b6b;">Delete</button>
                         </div>
                     `;
@@ -2122,10 +2129,11 @@
         }
 
         // Delete Swap
-        window.editSwap = function (id, amount, location) {
+        window.editSwap = function (id, amount, location, type) {
             document.getElementById('editSwapId').value = id;
             document.getElementById('editSwapAmount').value = amount;
             document.getElementById('editSwapLocation').value = location;
+            document.getElementById('editSwapType').value = type || 'need_cash';
             document.getElementById('editSwapModal').classList.add('active');
         };
 
@@ -2137,8 +2145,9 @@
             const id = document.getElementById('editSwapId').value;
             const amount = document.getElementById('editSwapAmount').value;
             const location = document.getElementById('editSwapLocation').value;
+            const type = document.getElementById('editSwapType').value;
 
-            if (!amount || !location) {
+            if (!amount || !location || !type) {
                 showNotification('Please fill in all fields.', 'error');
                 return;
             }
@@ -2147,7 +2156,7 @@
                 const response = await fetch(`/api/swaps/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount, location })
+                    body: JSON.stringify({ amount, location, type })
                 });
 
                 const result = await response.json();

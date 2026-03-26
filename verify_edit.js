@@ -16,24 +16,26 @@ async function verifyEdit() {
         return;
     }
     const oldSwap = rows[0];
-    console.log("Old Swap Amount:", oldSwap.amount, "Location:", oldSwap.location, "Created:", oldSwap.created_at, "Edited:", oldSwap.is_edited);
+    console.log("Old Swap Amount:", oldSwap.amount, "Type:", oldSwap.type, "Location:", oldSwap.location, "Created:", oldSwap.created_at, "Edited:", oldSwap.is_edited);
 
     // 2. Perform manual update (simulating the API)
-    const newAmount = 25.00;
-    const newLocation = "Main Gate (Edited)";
+    const newAmount = 30.00;
+    const newLocation = "Main Gate (Type Edited)";
+    const newType = oldSwap.type === 'need_cash' ? 'need_upi' : 'need_cash'; // Toggle type
+    
     await connection.execute(`
             UPDATE swaps 
-            SET amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
+            SET type = ?, amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
             WHERE id = ?
-        `, [newAmount, newAmount, newAmount, newLocation, 107]);
+        `, [newType, newAmount, newAmount, newAmount, newLocation, 107]);
 
     // 3. Verify
     const [rows2] = await connection.execute('SELECT * FROM swaps WHERE id = 107');
     const newSwap = rows2[0];
-    console.log("New Swap Amount:", newSwap.amount, "Location:", newSwap.location, "Created:", newSwap.created_at, "Edited:", newSwap.is_edited);
+    console.log("New Swap Amount:", newSwap.amount, "Type:", newSwap.type, "Location:", newSwap.location, "Created:", newSwap.created_at, "Edited:", newSwap.is_edited);
 
-    if (newSwap.amount == 25.00 && newSwap.location == "Main Gate (Edited)" && newSwap.is_edited == 1) {
-        console.log("✅ VERIFICATION SUCCESS: Swap edited correctly!");
+    if (newSwap.amount == 30.00 && newSwap.location == newLocation && newSwap.type == newType && newSwap.is_edited == 1) {
+        console.log("✅ VERIFICATION SUCCESS: Swap type and other fields edited correctly!");
     } else {
         console.log("❌ VERIFICATION FAILED: Data mismatch.");
     }
