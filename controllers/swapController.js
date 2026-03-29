@@ -99,6 +99,7 @@ exports.createSwap = async (req, res) => {
                     let emailPartners = matchRows.map(r => ({
                         name: r.partner_name,
                         amount: r.remaining_amount,
+                        type: r.type, // Added type
                         rating: r.partner_rating,
                         location: r.location
                     }));
@@ -567,9 +568,12 @@ SELECT
   s.status,
   s.is_edited,
   s.created_at AS posted_time,
+  s.amount,
+  s.type,
   s.location,
   u1.name AS requester_name,
-  u2.name AS accepter_name
+  u2.name AS accepter_name,
+  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = m.swap_id AND cm.sender_id != ? AND cm.status != 'seen') AS unread_count
 FROM matches m
 JOIN swaps s ON m.swap_id = s.id
 JOIN users u1 ON m.requester_id = u1.id
@@ -580,7 +584,7 @@ WHERE
 ORDER BY m.created_at DESC;
         `;
         
-        const [rows1] = await promisePool.execute(query1, [currentUserId, currentUserId]);
+        const [rows1] = await promisePool.execute(query1, [currentUserId, currentUserId, currentUserId]);
 
         const query2 = `
 SELECT 
@@ -596,7 +600,8 @@ SELECT
   s.type,
   s.location,
   u1.name AS requester_name,
-  u2.name AS accepter_name
+  u2.name AS accepter_name,
+  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = s.id AND cm.sender_id != ? AND cm.status != 'seen') AS unread_count
 FROM swaps s
 LEFT JOIN users u1 ON s.user_id = u1.id
 LEFT JOIN users u2 ON s.matched_user_id = u2.id
@@ -604,7 +609,7 @@ WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confi
 AND (s.user_id = ? OR s.matched_user_id = ?)
 ORDER BY s.created_at DESC;
         `;
-        const [rows2] = await promisePool.execute(query2, [currentUserId, currentUserId]);
+        const [rows2] = await promisePool.execute(query2, [currentUserId, currentUserId, currentUserId]);
 
         const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
@@ -993,7 +998,11 @@ exports.getSwapFeed = async (req, res) => {
         );
 
         // 3. Fetch all active swaps from other users
-        const query = `
+        const { minAmount, maxAmount, type, sort } = req.query;
+
+        let queryParams = [userId];
+        
+        let query = `
             SELECT 
               s.id,
               s.user_id,
@@ -1001,15 +1010,35 @@ exports.getSwapFeed = async (req, res) => {
               s.amount,
               s.type,
               s.status,
-  s.is_edited,
+              s.is_edited,
               s.location,
               s.created_at
             FROM swaps s
             JOIN users u ON s.user_id = u.id
             WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open') AND s.user_id != ?
-            ORDER BY s.created_at DESC;
         `;
-        const [rows] = await promisePool.execute(query, [userId]);
+
+        if (minAmount) {
+            query += " AND s.amount >= ?";
+            queryParams.push(parseFloat(minAmount));
+        }
+
+        if (maxAmount) {
+            query += " AND s.amount <= ?";
+            queryParams.push(parseFloat(maxAmount));
+        }
+
+        if (type === 'UPI') {
+            query += " AND s.type = 'need_upi'";
+        } else if (type === 'CASH') {
+            query += " AND s.type = 'need_cash'";
+        }
+
+        if (sort === 'latest' || !sort) {
+            query += " ORDER BY s.created_at DESC";
+        }
+
+        const [rows] = await promisePool.execute(query, queryParams);
 
         // 4. Transform and Filter
         const enrichedSwaps = rows.map(swap => {
@@ -1028,6 +1057,21 @@ exports.getSwapFeed = async (req, res) => {
         if (userAutoMatch) {
             // IF auto_match = ON, do NOT show exact matches in feed
             finalSwaps = enrichedSwaps.filter(s => !s.isBestMatch);
+        }
+
+        if (sort === 'closest') {
+            const [lastReqRows] = await promisePool.execute(
+                'SELECT amount FROM swaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                [userId]
+            );
+            if (lastReqRows.length > 0) {
+                const lastRequestAmount = parseFloat(lastReqRows[0].amount);
+                finalSwaps.sort((a, b) => {
+                    const diffA = Math.abs(parseFloat(a.amount) - lastRequestAmount);
+                    const diffB = Math.abs(parseFloat(b.amount) - lastRequestAmount);
+                    return diffA - diffB;
+                });
+            }
         }
 
         console.log(`Feed query for user ${userId} returned ${finalSwaps.length} rows (Auto-match: ${userAutoMatch})`);

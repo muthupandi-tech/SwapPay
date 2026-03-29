@@ -630,6 +630,21 @@
             transform: scale(1.05);
         }
 
+        .unread-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #ff4757;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border: 2px solid #1a1a1a;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
         /* Tabs Styles */
         .tabs-container {
             display: flex;
@@ -1079,6 +1094,23 @@
             <div class="swaps-grid" id="swapsContainer" style="display: grid;">
                 <p style="color: var(--text-secondary);">Loading swaps...</p>
             </div>
+            <div id="feedFilters" style="display: none; background: var(--glass-bg); padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid var(--glass-border); gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="number" id="filterMin" placeholder="Min Amount" class="form-control" style="width: 140px; padding: 0.5rem; flex: 1; min-width: 120px;">
+                <input type="number" id="filterMax" placeholder="Max Amount" class="form-control" style="width: 140px; padding: 0.5rem; flex: 1; min-width: 120px;">
+                <select id="filterType" class="form-control" style="width: 140px; padding: 0.5rem; flex: 1; min-width: 120px;">
+                    <option value="">All Types</option>
+                    <option value="UPI">UPI</option>
+                    <option value="CASH">Cash</option>
+                </select>
+                <select id="filterSort" class="form-control" style="width: 140px; padding: 0.5rem; flex: 1; min-width: 120px;">
+                    <option value="latest">Latest</option>
+                    <option value="closest">Closest Amount</option>
+                </select>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-primary" onclick="applyFeedFilters()" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Apply Filters</button>
+                    <button class="btn-primary" onclick="resetFeedFilters()" style="padding: 0.5rem 1rem; font-size: 0.9rem; background: rgba(255,107,107,0.1); border: 1px solid #ff6b6b; color: #ff6b6b;">Reset</button>
+                </div>
+            </div>
             <div id="swapFeedContainer" style="display: none;"></div>
         </div>
     </main>
@@ -1264,11 +1296,31 @@
             });
 
             // Chat Room Joining
-            function joinChatRoom(swapId) {
-                if (socket && swapId) {
-                    socket.emit('joinRoom', swapId);
+            window.openChatModal = async function (swapId, partnerName) {
+                activeChatSwapId = swapId;
+                chatPartnerNameElement.innerText = partnerName || 'Partner';
+                chatMessagesContainer.innerHTML = '<div style="text-align: center; opacity: 0.5; padding: 2rem;">Loading messages...</div>';
+                chatModal.classList.add('active');
+
+                // Clear unread badge immediately
+                const badge = document.getElementById(`unread-badge-${swapId}`);
+                if (badge) badge.remove();
+
+                try {
+                    // Mark as seen on server
+                    if (socket && currentUserId) {
+                        socket.emit('messageSeen', { swapId: swapId, userId: currentUserId });
+                    }
+
+                    await loadChatHistory(swapId);
+                    
+                    if (socket) {
+                        socket.emit('joinRoom', swapId);
+                    }
+                } catch (err) {
+                    console.error('Error opening chat:', err);
                 }
-            }
+            };
 
             // Chat Status Listener
             socket.on("messageStatusUpdate", (data) => {
@@ -1280,6 +1332,27 @@
             socket.on("newMessage", (msg) => {
               console.log("Received message:", msg);
               addMessageToChatUI(msg);
+
+              // Update unread badge if message is not from current user and chat is not active
+              if (msg.sender_id !== currentUserId && msg.swap_id !== activeChatSwapId) {
+                  let badge = document.getElementById(`unread-badge-${msg.swap_id}`);
+                  if (!badge) {
+                      // Create new badge if it doesn't exist
+                      const chatButton = document.querySelector(`.swap-card[data-swap-id="${msg.swap_id}"] .chat-button-wrapper`);
+                      if (chatButton) {
+                          badge = document.createElement('div');
+                          badge.id = `unread-badge-${msg.swap_id}`;
+                          badge.className = 'unread-badge';
+                          badge.innerText = '1';
+                          chatButton.appendChild(badge);
+                      }
+                  } else {
+                      // Increment existing badge
+                      let count = parseInt(badge.innerText) || 0;
+                      count++;
+                      badge.innerText = count > 9 ? '9+' : count.toString();
+                  }
+              }
             });
 
             // Typing Indicator Listeners
@@ -1598,19 +1671,30 @@
                 } else if (swap.status === 'matched') {
                     let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
 
-                    let chatButtonHtml = `<button class="btn-accept-swap" onclick="openChatModal(${swap.id}, '${headerName}')" style="margin-top: 0.5rem; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6;">💬 Chat with Partner</button>`;
+                    const unreadBadgeHtml = swap.unread_count > 0 ? `<div class="unread-badge" id="unread-badge-${swap.id}">${swap.unread_count > 9 ? '9+' : swap.unread_count}</div>` : '';
+
+                    let chatButtonHtml = `
+                        <div class="chat-button-wrapper" style="position: relative; width: 100%;">
+                            <button class="btn-accept-swap" onclick="openChatModal(${swap.id}, '${headerName}')" style="background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6; width: 100%; margin-top: 0;">💬 Chat</button>
+                            ${unreadBadgeHtml}
+                        </div>
+                    `;
 
                     if (hasCompleted) {
                         actionArea = `
                             <div class="status-text warning" style="color: #f59e0b; border-color: #f59e0b;">Waiting for Partner to Confirm</div>
-                            <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem; background: #64748b;">Confirmed by You</button>
-                            ${chatButtonHtml}
+                            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                                <button class="btn-accept-swap btn-disabled" style="flex: 1; margin-top: 0; background: #64748b;">Confirmed</button>
+                                <div style="flex: 1;">${chatButtonHtml}</div>
+                            </div>
                         `;
                     } else {
                         actionArea = `
-                            <div class="status-text warning">Swap Matched – Waiting for Completion</div>
-                            <button class="btn-accept-swap" onclick="completeSwap(${swap.id})" style="margin-top: 1rem;">Mark as Completed</button>
-                            ${chatButtonHtml}
+                            <div class="status-text warning">Matched – Waiting for Completion</div>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                                <button class="btn-accept-swap" onclick="completeSwap(${swap.id})" style="flex: 1; margin-top: 0;">Complete</button>
+                                <div style="flex: 1;">${chatButtonHtml}</div>
+                            </div>
                         `;
                     }
                 } else if (swap.status === 'completed') {
@@ -1629,7 +1713,7 @@
             const editedLabel = swap.is_edited ? '<span style="font-size: 0.7rem; color: var(--accent-primary); margin-left: 0.4rem; padding: 2px 6px; background: rgba(59,130,246,0.1); border-radius: 4px; border: 1px solid rgba(59,130,246,0.2);">edited</span>' : '';
 
             return ` 
-            <div class="swap-card ${statusClass}" > 
+            <div class="swap-card ${statusClass}" data-swap-id="${swap.id}"> 
                 <div class="swap-card-header" > 
                     <div> 
                         <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;" >${headerName} ${headerName !== 'You' ? ratingBadge : ''}</h3> 
@@ -1842,16 +1926,19 @@
             
             const sCont = document.getElementById('swapsContainer');
             const fCont = document.getElementById('swapFeedContainer');
+            const filters = document.getElementById('feedFilters');
 
             if (tabName === 'available') {
                 document.getElementById('tabAvailable').classList.add('active');
                 sCont.style.display = 'grid';
                 fCont.style.display = 'none';
+                if (filters) filters.style.display = 'none';
                 loadSwaps();
             } else if (tabName === 'feed') {
                 document.getElementById('tabFeed').classList.add('active');
                 sCont.style.display = 'none';
                 fCont.style.display = 'block';
+                if (filters) filters.style.display = 'flex';
                 loadSwapFeed();
             }
         };
@@ -1860,8 +1947,29 @@
             const container = document.getElementById('swapFeedContainer');
             container.innerHTML = "Loading swaps...";
 
+            let minAmount = '';
+            let maxAmount = '';
+            let type = '';
+            let sort = '';
+
+            const filterMinEl = document.getElementById('filterMin');
+            if (filterMinEl) {
+                minAmount = filterMinEl.value;
+                maxAmount = document.getElementById('filterMax').value;
+                type = document.getElementById('filterType').value;
+                sort = document.getElementById('filterSort').value;
+            }
+
             try {
-                const response = await fetch("/api/swaps/feed", {
+                const queryParams = new URLSearchParams();
+                if (minAmount) queryParams.append('minAmount', minAmount);
+                if (maxAmount) queryParams.append('maxAmount', maxAmount);
+                if (type) queryParams.append('type', type);
+                if (sort) queryParams.append('sort', sort);
+
+                const url = queryParams.toString() ? `/api/swaps/feed?${queryParams.toString()}` : "/api/swaps/feed";
+
+                const response = await fetch(url, {
                     method: "GET",
                     credentials: "include"
                 });
@@ -1875,7 +1983,7 @@
 
                 container.innerHTML = "";
                 if (data.swaps.length === 0) {
-                    container.innerHTML = "No swaps available";
+                    container.innerHTML = "No swaps found for selected filters";
                     return;
                 }
 
@@ -2611,6 +2719,22 @@
         };
 
         // ---------------- End Chat Logic ----------------
+
+        // Feed Filter Callbacks
+        window.applyFeedFilters = function() {
+            loadSwapFeed();
+        };
+
+        window.resetFeedFilters = function() {
+            const filterMinEl = document.getElementById('filterMin');
+            if (filterMinEl) {
+                filterMinEl.value = "";
+                document.getElementById('filterMax').value = "";
+                document.getElementById('filterType').value = "";
+                document.getElementById('filterSort').value = "latest";
+            }
+            loadSwapFeed();
+        };
 
     </script>
 </body>
