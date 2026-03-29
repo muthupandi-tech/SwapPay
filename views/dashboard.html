@@ -1458,6 +1458,23 @@
             }
         }
 
+        // Trust Badge HTML Generator
+        function getTrustBadgeHTML(scoreRaw) {
+            let score = 0;
+            if (typeof scoreRaw === 'string' && scoreRaw.includes('%')) {
+                score = parseFloat(scoreRaw) / 20; // fallback if percent
+            } else if (scoreRaw) {
+                score = parseFloat(scoreRaw);
+            }
+            if (score >= 4.5) {
+                return `<span style="background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,165,0,0.1)); color: #ffd700; border: 1px solid rgba(255,215,0,0.3); box-shadow: 0 0 8px rgba(255,215,0,0.2); padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; white-space: nowrap;">🟡 Gold Trusted</span>`;
+            } else if (score >= 3.5) {
+                return `<span style="background: rgba(192, 192, 192, 0.1); color: #cbd5e1; border: 1px solid rgba(192,192,192,0.3); box-shadow: 0 0 5px rgba(192,192,192,0.1); padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; white-space: nowrap;">⚪ Silver</span>`;
+            } else {
+                return `<span style="background: rgba(52, 152, 219, 0.1); color: #3498db; border: 1px solid rgba(52,152,219,0.3); padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; white-space: nowrap;">🔵 New User</span>`;
+            }
+        }
+
         // Handle Swap Creation
         swapForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1779,7 +1796,7 @@
 <div class="swap-card match-card" style="border-color: var(--accent-secondary); margin-bottom: 1rem;">
   <div class="swap-card-header">
     <div>
-      <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;">${otherUser}</h3>
+      <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;">${otherUser} ${getTrustBadgeHTML(match.trustScore)}</h3>
       <span class="swap-type-badge ${badgeClass}">${tLabel}</span>
     </div>
     <div style="text-align: right;">
@@ -1999,13 +2016,12 @@
                     const bestMatchBadge = swap.isBestMatch ? 
                         `<div style="background: #ff9f43; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-bottom: 8px; display: inline-block;">🔥 Best Match</div>` : '';
 
-                    const formattedScore = swap.trustScore ? parseFloat(swap.trustScore).toFixed(1) : "New";
-                    const trustBadge = (swap.trustScore && parseFloat(swap.trustScore) > 4.5) ? 
-                        `<div style="display: inline-block; background: rgba(46, 204, 113, 0.2); color: #2ecc71; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px;">Trusted User ⭐</div>` : '';
+                    const formattedScore = swap.trustScore ? parseFloat(swap.trustScore).toFixed(1) : "0.0";
+                    const trustBadge = getTrustBadgeHTML(swap.trustScore);
 
                     card.innerHTML = `
                       ${bestMatchBadge}
-                      <div class="swap-user" style="font-weight: bold; color: var(--text-primary); margin-bottom: 5px;">
+                      <div class="swap-user" style="font-weight: bold; color: var(--text-primary); margin-bottom: 5px; display: flex; align-items: center;">
                           ${swap.name} ${trustBadge}
                       </div>
                       <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
