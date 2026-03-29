@@ -1012,7 +1012,8 @@ exports.getSwapFeed = async (req, res) => {
               s.status,
               s.is_edited,
               s.location,
-              s.created_at
+              s.created_at,
+              (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
             FROM swaps s
             JOIN users u ON s.user_id = u.id
             WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open') AND s.user_id != ?
@@ -1034,11 +1035,17 @@ exports.getSwapFeed = async (req, res) => {
             query += " AND s.type = 'need_cash'";
         }
 
-        if (sort === 'latest' || !sort) {
-            query += " ORDER BY s.created_at DESC";
-        }
-
         const [rows] = await promisePool.execute(query, queryParams);
+
+        // Fetch userAmount for sorting
+        let userAmount = 0;
+        const [lastReqRows] = await promisePool.execute(
+            'SELECT amount FROM swaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+            [userId]
+        );
+        if (lastReqRows.length > 0) {
+            userAmount = parseFloat(lastReqRows[0].amount);
+        }
 
         // 4. Transform and Filter
         const enrichedSwaps = rows.map(swap => {
@@ -1059,20 +1066,24 @@ exports.getSwapFeed = async (req, res) => {
             finalSwaps = enrichedSwaps.filter(s => !s.isBestMatch);
         }
 
-        if (sort === 'closest') {
-            const [lastReqRows] = await promisePool.execute(
-                'SELECT amount FROM swaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-                [userId]
-            );
-            if (lastReqRows.length > 0) {
-                const lastRequestAmount = parseFloat(lastReqRows[0].amount);
-                finalSwaps.sort((a, b) => {
-                    const diffA = Math.abs(parseFloat(a.amount) - lastRequestAmount);
-                    const diffB = Math.abs(parseFloat(b.amount) - lastRequestAmount);
-                    return diffA - diffB;
-                });
+        // Apply advanced sorting logically based on Trust Score, Amount Diff, Latest Created
+        finalSwaps.sort((a, b) => {
+            const scoreA = parseFloat(a.trustScore) || 0;
+            const scoreB = parseFloat(b.trustScore) || 0;
+
+            if (scoreB !== scoreA) {
+                return scoreB - scoreA;
             }
-        }
+
+            const diffA = Math.abs(parseFloat(a.amount) - userAmount);
+            const diffB = Math.abs(parseFloat(b.amount) - userAmount);
+
+            if (diffA !== diffB) {
+                return diffA - diffB;
+            }
+
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
 
         console.log(`Feed query for user ${userId} returned ${finalSwaps.length} rows (Auto-match: ${userAutoMatch})`);
         res.status(200).json({ success: true, swaps: finalSwaps });

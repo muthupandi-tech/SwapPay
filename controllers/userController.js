@@ -163,3 +163,50 @@ exports.updateAutoMatch = async (req, res) => {
         res.status(500).json({ error: 'Internal server error.' });
     }
 };
+
+exports.getSettings = async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const [rows] = await promisePool.execute(
+            'SELECT auto_match, notification_sound, notification_vibration, notification_animation FROM users WHERE id = ?',
+            [userId]
+        );
+        
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+        
+        const settings = {
+            autoMatch: rows[0].auto_match === 1,
+            sound: rows[0].notification_sound === 1,
+            vibration: rows[0].notification_vibration === 1,
+            animation: rows[0].notification_animation === 1
+        };
+        
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+};
+
+exports.updateSettings = async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { autoMatch, sound, vibration, animation } = req.body;
+        
+        if (autoMatch === undefined || sound === undefined || vibration === undefined || animation === undefined) {
+            return res.status(400).json({ error: 'All settings values are required.' });
+        }
+        
+        await promisePool.execute(
+            'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ? WHERE id = ?',
+            [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, userId]
+        );
+        
+        res.json({ success: true, message: 'Settings updated successfully.' });
+    } catch (error) {
+        console.error('Error updating settings:', error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+};

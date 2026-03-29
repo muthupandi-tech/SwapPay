@@ -311,8 +311,8 @@
     <nav class="navbar">
         <div class="logo">Swap<span>Pay</span></div>
         <ul class="nav-links" style="display: flex; align-items: center;">
-            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Back
-                    to Dashboard</a></li>
+            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Back to Dashboard</a></li>
+            <li><a href="/settings" style="color: var(--text-secondary); text-decoration: none; font-weight: 600; margin-left: 2rem;">Settings</a></li>
         </ul>
     </nav>
 
@@ -354,13 +354,7 @@
                     <span class="info-label">Member Since</span>
                     <span class="info-value" id="profileJoined">-</span>
                 </div>
-                <div class="info-row" style="align-items: center; margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem;">
-                    <span class="info-label" style="color: var(--accent-secondary);">Auto-Match Requests</span>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span id="autoMatchStatus" style="font-size: 0.8rem; font-weight: bold; color: var(--text-secondary);">ON</span>
-                        <input type="checkbox" id="autoMatchToggle" checked style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-secondary);">
-                    </div>
-                </div>
+                <!-- Auto-Match migrated to Settings page -->
             </div>
 
             <!-- Right Column: Stats & Feedback -->
@@ -486,13 +480,7 @@
                 document.getElementById('statTrust').textContent = data.stats.trustScore;
                 document.getElementById('statSwaps').textContent = data.stats.totalSwapsCompleted;
 
-                // Auto-Match Toggle
-                const amToggle = document.getElementById('autoMatchToggle');
-                const amStatus = document.getElementById('autoMatchStatus');
-                const isAutoMatch = data.user.auto_match === 1 || data.user.auto_match === true;
-                amToggle.checked = isAutoMatch;
-                amStatus.textContent = isAutoMatch ? 'ON' : 'OFF';
-                amStatus.style.color = isAutoMatch ? '#00cec9' : '#ff6b6b';
+                // Auto-Match toggle migrated to Settings page
 
                 // Populate Edit Form
                 document.getElementById('editName').value = data.user.name;
@@ -567,33 +555,7 @@
 
 
 
-        // Handle Auto-Match Toggle
-        document.getElementById('autoMatchToggle').addEventListener('change', async (e) => {
-            const isChecked = e.target.checked;
-            const amStatus = document.getElementById('autoMatchStatus');
-            
-            try {
-                const response = await fetch('/api/user/auto-match', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ autoMatch: isChecked })
-                });
-
-                if (response.ok) {
-                    amStatus.textContent = isChecked ? 'ON' : 'OFF';
-                    amStatus.style.color = isChecked ? '#00cec9' : '#ff6b6b';
-                    showToast(`Auto-Match turned ${isChecked ? 'ON' : 'OFF'}`);
-                } else {
-                    const data = await response.json();
-                    showToast(data.error || 'Failed to update Auto-Match', '❌');
-                    e.target.checked = !isChecked; // Revert
-                }
-            } catch (err) {
-                console.error(err);
-                showToast('An error occurred', '❌');
-                e.target.checked = !isChecked; // Revert
-            }
-        });
+        // Auto-Match listeners moved to Settings page
 
         // Init
         document.addEventListener('DOMContentLoaded', loadProfile);

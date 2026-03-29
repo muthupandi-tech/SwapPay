@@ -182,6 +182,11 @@ const requireLogin = (req, res, next) => {
     }
 };
 
+// Basic Hello World API to verify everything works properly
+app.get('/api/hello', (req, res) => {
+    res.json({ message: "Hello World! The local development environment is running cleanly." });
+});
+
 // Routes to serve the HTML pages
 app.get('/', (req, res) => {
     // If logged in, redirect to dashboard
@@ -213,6 +218,11 @@ app.get('/dashboard', requireLogin, (req, res) => {
 // Protected Route for Profile
 app.get('/profile', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'profile.html'));
+});
+
+// Protected Route for Settings
+app.get('/settings', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'settings.html'));
 });
 
 // Protected Route for Admin Dashboard

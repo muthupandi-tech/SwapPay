@@ -1023,7 +1023,7 @@
         <div class="logo">Swap<span>Pay</span></div>
         <ul class="nav-links" style="display: flex; align-items: center;">
             <li class="notification-container" onclick="toggleNotifications(event)">
-                <div class="bell-icon">🔔</div>
+                <div class="bell-icon" id="notification-bell">🔔</div>
                 <div class="notification-badge" id="notifBadge">0</div>
 
                 <div class="notification-dropdown" id="notifDropdown" onclick="event.stopPropagation()">
@@ -1045,6 +1045,7 @@
                 <div class="profile-avatar">👤</div>
                 <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
                     <a href="/profile" class="profile-dropdown-item">View Profile</a>
+                    <a href="/settings" class="profile-dropdown-item">Settings</a>
                     <a href="/api/auth/logout" class="profile-dropdown-item text-danger">Logout</a>
                 </div>
             </div>
@@ -1998,9 +1999,18 @@
                     const bestMatchBadge = swap.isBestMatch ? 
                         `<div style="background: #ff9f43; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-bottom: 8px; display: inline-block;">🔥 Best Match</div>` : '';
 
+                    const formattedScore = swap.trustScore ? parseFloat(swap.trustScore).toFixed(1) : "New";
+                    const trustBadge = (swap.trustScore && parseFloat(swap.trustScore) > 4.5) ? 
+                        `<div style="display: inline-block; background: rgba(46, 204, 113, 0.2); color: #2ecc71; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px;">Trusted User ⭐</div>` : '';
+
                     card.innerHTML = `
                       ${bestMatchBadge}
-                      <div class="swap-user" style="font-weight: bold; color: var(--text-primary); margin-bottom: 5px;">${swap.name}</div>
+                      <div class="swap-user" style="font-weight: bold; color: var(--text-primary); margin-bottom: 5px;">
+                          ${swap.name} ${trustBadge}
+                      </div>
+                      <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
+                          ⭐ ${formattedScore} Trust Score
+                      </div>
                       <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${swap.amount}</div>
                       <div class="swap-type" style="margin-bottom: 10px;">
                         <span class="swap-type-badge ${swap.type === 'need_cash' ? 'type-upi' : 'type-cash'}" style="font-size: 0.8rem;">
@@ -2339,8 +2349,8 @@
 
                 showToast(`< strong > ${data.title}</strong > <br>${data.message}`, icon);
 
-                // Play Sound
-                playNotificationSound();
+                // Custom Effect (Shake, Sound, Vibrate)
+                triggerNotificationEffect();
 
                 // Refresh Notifications dropdown
                 loadNotifications();
@@ -2352,31 +2362,42 @@
             });
         }
 
-        // Play Sound
-        function playNotificationSound() {
-            try {
-                // simple beep using Web Audio API
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const audioCtx = new AudioContext();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
+        // Notification Effects
+        let isNotificationRinging = false;
+        let userNotificationSettings = {
+            sound: true,
+            vibration: true,
+            animation: true
+        };
 
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-                oscillator.frequency.exponentialRampToValueAtTime(880.00, audioCtx.currentTime + 0.1); // A5
+        const triggerNotificationEffect = () => {
+            if (isNotificationRinging) return;
+            isNotificationRinging = true;
 
-                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
-                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.5);
-            } catch (e) {
-                console.log('Audio disabled or unsupported');
+            // Shake animation
+            if (userNotificationSettings.animation) {
+                const bell = document.getElementById("notification-bell");
+                if (bell) {
+                    bell.classList.add("shake");
+                    setTimeout(() => bell.classList.remove("shake"), 500);
+                }
             }
-        }
+
+            // Sound
+            if (userNotificationSettings.sound) {
+                const audio = new Audio("/notification.mp3");
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+            }
+
+            // Vibration (mobile only)
+            if (userNotificationSettings.vibration && navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]);
+            }
+
+            // Debounce
+            setTimeout(() => { isNotificationRinging = false; }, 1000);
+        };
 
         // Notification UI Logic
         function toggleNotifications(event) {
@@ -2474,9 +2495,22 @@
             }
         }
 
+        async function loadUserSettings() {
+            try {
+                const res = await fetch('/api/user/settings');
+                if (res.ok) {
+                    const data = await res.json();
+                    userNotificationSettings = data.settings;
+                }
+            } catch (err) {
+                console.error('Failed to load settings', err);
+            }
+        }
+
         // Refresh all data
         function loadAllData() {
             fetchCurrentUser();
+            loadUserSettings();
             loadStats();
             loadMySwaps();
             loadSwaps();
@@ -2487,6 +2521,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await fetchCurrentUser(); // Fetch user first
 
+            loadUserSettings();
             loadStats();
             loadMySwaps();
             loadSwaps();
