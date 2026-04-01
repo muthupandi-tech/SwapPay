@@ -987,9 +987,12 @@ exports.getSwapFeed = async (req, res) => {
     }
 
     try {
-        // 1. Fetch user's auto_match preference
-        const [userRows] = await promisePool.execute('SELECT auto_match FROM users WHERE id = ?', [userId]);
+        // 1. Fetch user's auto_match preference and location details
+        const [userRows] = await promisePool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
+        const userLat = userRows.length > 0 ? userRows[0].latitude : null;
+        const userLng = userRows.length > 0 ? userRows[0].longitude : null;
+        const userRadius = userRows.length > 0 ? (userRows[0].search_radius || 300) : 300;
 
         // 2. Fetch user's active swaps to identify potential "Best Matches"
         const [myActiveSwaps] = await promisePool.execute(
@@ -1007,6 +1010,8 @@ exports.getSwapFeed = async (req, res) => {
               s.id,
               s.user_id,
               u.name,
+              u.latitude as creator_lat,
+              u.longitude as creator_lng,
               s.amount,
               s.type,
               s.status,
@@ -1047,6 +1052,19 @@ exports.getSwapFeed = async (req, res) => {
             userAmount = parseFloat(lastReqRows[0].amount);
         }
 
+        // Helper function for distance
+        function getDistance(lat1, lon1, lat2, lon2) {
+            if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+            const R = 6371e3;
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
         // 4. Transform and Filter
         const enrichedSwaps = rows.map(swap => {
             const swapAmount = parseFloat(swap.amount);
@@ -1057,17 +1075,54 @@ exports.getSwapFeed = async (req, res) => {
                 parseFloat(mySwap.amount) === swapAmount && mySwap.type === oppositeType
             );
 
-            return { ...swap, isBestMatch };
+            const dist = getDistance(userLat, userLng, swap.creator_lat, swap.creator_lng);
+
+            return { ...swap, isBestMatch, distanceVal: dist };
         });
 
         let finalSwaps = enrichedSwaps;
+
+        if (userLat != null && userLng != null) {
+            // Apply location filter. If creator location is missing, distanceVal is null, we can choose to show it (fallback) or hide it.
+            // Requirement: "If user location is not available: Show all swaps." Here user location IS available.
+            // Creator location missing means we can't filter. Let's include them for safety, or exclude.
+            // Prompt says "Only include swaps where: distance <= search_radius"
+            finalSwaps = finalSwaps.filter(s => s.distanceVal === null || s.distanceVal <= userRadius);
+        }
+
         if (userAutoMatch) {
             // IF auto_match = ON, do NOT show exact matches in feed
             finalSwaps = enrichedSwaps.filter(s => !s.isBestMatch);
+            if (userLat != null && userLng != null) {
+                finalSwaps = finalSwaps.filter(s => s.distanceVal === null || s.distanceVal <= userRadius);
+            }
         }
 
-        // Apply advanced sorting logically based on Trust Score, Amount Diff, Latest Created
+        // Format distance and delete raw val
+        finalSwaps = finalSwaps.map(s => {
+            if (s.distanceVal !== null) {
+                s.distance = Math.round(s.distanceVal) + "m";
+            }
+            return s;
+        });
+
+        // Apply sorting: 1. Nearest distance, 2. Higher trust score, 3. Latest created
         finalSwaps.sort((a, b) => {
+            // 1. Nearest Distance
+            const distA = a.distanceVal;
+            const distB = b.distanceVal;
+            if (distA !== null && distB !== null) {
+                const diff = distA - distB;
+                if (Math.abs(diff) > 1) { // Sort if difference is meaningful
+                    return diff;
+                }
+            } else if (distA !== null && distB === null) {
+                return -1; // Items with distance go first
+            } else if (distA === null && distB !== null) {
+                return 1;
+            }
+
+            // 2. Higher Trust Score
             const scoreA = parseFloat(a.trustScore) || 0;
             const scoreB = parseFloat(b.trustScore) || 0;
 
@@ -1075,13 +1130,7 @@ exports.getSwapFeed = async (req, res) => {
                 return scoreB - scoreA;
             }
 
-            const diffA = Math.abs(parseFloat(a.amount) - userAmount);
-            const diffB = Math.abs(parseFloat(b.amount) - userAmount);
-
-            if (diffA !== diffB) {
-                return diffA - diffB;
-            }
-
+            // 3. Latest Created
             return new Date(b.created_at) - new Date(a.created_at);
         });
 

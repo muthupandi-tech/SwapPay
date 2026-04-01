@@ -2001,7 +2001,12 @@
 
                 container.innerHTML = "";
                 if (data.swaps.length === 0) {
-                    container.innerHTML = "No swaps found for selected filters";
+                    container.innerHTML = `
+                        <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                            <p style="margin-bottom: 1rem;">No swaps nearby. Try increasing your range.</p>
+                            <button class="btn-primary" onclick="expandSearchRange()">Expand to 750m</button>
+                        </div>
+                    `;
                     return;
                 }
 
@@ -2027,6 +2032,7 @@
                       <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
                           ⭐ ${formattedScore} Trust Score
                       </div>
+                      ${swap.distance ? `<div style="font-size: 0.9rem; color: #00cec9; margin-bottom: 5px; font-weight: bold;">📍 ${swap.distance} away</div>` : ''}
                       <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${swap.amount}</div>
                       <div class="swap-type" style="margin-bottom: 10px;">
                         <span class="swap-type-badge ${swap.type === 'need_cash' ? 'type-upi' : 'type-cash'}" style="font-size: 0.8rem;">
@@ -2049,6 +2055,29 @@
                 container.innerHTML = "Failed to load feed.";
             }
         }
+
+        window.expandSearchRange = async function() {
+            try {
+                const res = await fetch('/api/user/settings');
+                if (res.ok) {
+                    const data = await res.json();
+                    let updatedSettings = data.settings;
+                    updatedSettings.search_radius = 750;
+
+                    await fetch('/api/user/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedSettings)
+                    });
+                    
+                    showToast('Range expanded to 750m', '📍');
+                    loadSwapFeed();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to expand range.');
+            }
+        };
 
         document.addEventListener("click", (e) => {
             if (e.target.classList.contains("accept-btn")) {
@@ -2536,6 +2565,24 @@
         // Initial Load
         document.addEventListener('DOMContentLoaded', async () => {
             await fetchCurrentUser(); // Fetch user first
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        fetch("/api/user/location", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ latitude: lat, longitude: lng })
+                        });
+                    },
+                    (err) => {
+                        console.warn("Location access denied or failed");
+                        showToast("Location not available. Showing all swaps.", "⚠️");
+                    }
+                );
+            }
 
             loadUserSettings();
             loadStats();

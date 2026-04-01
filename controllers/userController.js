@@ -138,6 +138,31 @@ exports.updateLocation = async (req, res) => {
     }
 };
 
+exports.postLocation = async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+        }
+
+        const { latitude, longitude } = req.body;
+
+        if (latitude === undefined || longitude === undefined) {
+            return res.status(400).json({ error: 'latitude and longitude are required.' });
+        }
+
+        await promisePool.execute(
+            'UPDATE users SET latitude = ?, longitude = ? WHERE id = ?',
+            [latitude, longitude, userId]
+        );
+
+        res.json({ success: true, message: 'Location updated successfully.' });
+    } catch (error) {
+        console.error('Error updating location:', error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+};
+
 exports.updateAutoMatch = async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -168,7 +193,7 @@ exports.getSettings = async (req, res) => {
     try {
         const userId = req.session.userId;
         const [rows] = await promisePool.execute(
-            'SELECT auto_match, notification_sound, notification_vibration, notification_animation FROM users WHERE id = ?',
+            'SELECT auto_match, notification_sound, notification_vibration, notification_animation, search_radius FROM users WHERE id = ?',
             [userId]
         );
         
@@ -180,7 +205,8 @@ exports.getSettings = async (req, res) => {
             autoMatch: rows[0].auto_match === 1,
             sound: rows[0].notification_sound === 1,
             vibration: rows[0].notification_vibration === 1,
-            animation: rows[0].notification_animation === 1
+            animation: rows[0].notification_animation === 1,
+            search_radius: rows[0].search_radius || 300
         };
         
         res.json({ success: true, settings });
@@ -193,15 +219,15 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
     try {
         const userId = req.session.userId;
-        const { autoMatch, sound, vibration, animation } = req.body;
+        const { autoMatch, sound, vibration, animation, search_radius } = req.body;
         
         if (autoMatch === undefined || sound === undefined || vibration === undefined || animation === undefined) {
             return res.status(400).json({ error: 'All settings values are required.' });
         }
         
         await promisePool.execute(
-            'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ? WHERE id = ?',
-            [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, userId]
+            'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ?, search_radius = ? WHERE id = ?',
+            [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, search_radius || 300, userId]
         );
         
         res.json({ success: true, message: 'Settings updated successfully.' });

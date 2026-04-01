@@ -14,6 +14,7 @@ const requireLoginAPI = (req, res, next) => {
 router.get('/profile', requireLoginAPI, userController.getProfile);
 router.put('/profile', requireLoginAPI, userController.updateProfile);
 router.put('/location', requireLoginAPI, userController.updateLocation);
+router.post('/location', requireLoginAPI, userController.postLocation);
 router.post('/auto-match', requireLoginAPI, userController.updateAutoMatch);
 router.get('/settings', requireLoginAPI, userController.getSettings);
 router.post('/settings', requireLoginAPI, userController.updateSettings);

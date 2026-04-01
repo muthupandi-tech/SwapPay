@@ -187,6 +187,19 @@
                 <div class="toggle-switch" id="toggleAutoMatch" onclick="toggleSetting('autoMatch')"></div>
             </div>
         </div>
+        <div class="card">
+            <h2>Location Filtering</h2>
+            <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
+                <div class="setting-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3>Search Radius</h3>
+                        <p>Limit the swap feed to a specific physical distance.</p>
+                    </div>
+                    <div style="font-weight: 800; color: var(--accent-secondary);" id="radiusDisplay">Showing swaps within 300m</div>
+                </div>
+                <input type="range" id="searchRadius" min="100" max="750" step="50" style="width: 100%; margin-top: 1.5rem; accent-color: var(--accent-secondary);" oninput="updateRadiusDisplay(this.value)" onchange="saveRadius(this.value)" />
+            </div>
+        </div>
     </main>
 
     <div class="toast-container" id="toastContainer"></div>
@@ -196,7 +209,8 @@
             sound: true,
             vibration: true,
             animation: true,
-            autoMatch: true
+            autoMatch: true,
+            search_radius: 300
         };
 
         // Toast Helper
@@ -233,6 +247,34 @@
             document.getElementById('toggleVibration').className = 'toggle-switch ' + (settings.vibration ? 'active' : '');
             document.getElementById('toggleAnimation').className = 'toggle-switch ' + (settings.animation ? 'active' : '');
             document.getElementById('toggleAutoMatch').className = 'toggle-switch ' + (settings.autoMatch ? 'active' : '');
+            
+            if (document.getElementById('searchRadius')) {
+                document.getElementById('searchRadius').value = settings.search_radius || 300;
+                updateRadiusDisplay(settings.search_radius || 300);
+            }
+        }
+
+        function updateRadiusDisplay(val) {
+            document.getElementById('radiusDisplay').textContent = `Showing swaps within ${val}m`;
+        }
+
+        async function saveRadius(val) {
+            settings.search_radius = parseInt(val);
+            try {
+                const res = await fetch('/api/user/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                if (res.ok) {
+                    showToast('Search radius saved automatically');
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to save radius', '❌');
+            }
         }
 
         async function toggleSetting(key) {
