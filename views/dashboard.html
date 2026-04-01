@@ -1761,6 +1761,10 @@
                 if (currentTab === 'completed') fetchUrl = '/api/swaps/completed';
 
                 const response = await fetch(fetchUrl);
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`API returned ${response.status}: ${errorText}`);
@@ -1910,6 +1914,10 @@
                 const url = '/api/swaps/nearby';
 
                 const response = await fetch(url);
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`API returned ${response.status}: ${errorText}`);
@@ -1992,6 +2000,10 @@
                     credentials: "include"
                 });
 
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error("Failed fetching feed");
                 }
@@ -2032,7 +2044,7 @@
                       <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
                           ⭐ ${formattedScore} Trust Score
                       </div>
-                      ${swap.distance ? `<div style="font-size: 0.9rem; color: #00cec9; margin-bottom: 5px; font-weight: bold;">📍 ${swap.distance} away</div>` : ''}
+                      ${swap.distance ? `<div style="font-size: 0.9rem; color: ${swap.distance.includes('unavailable') ? '#f59e0b' : '#00cec9'}; margin-bottom: 5px; font-weight: bold;">${swap.distance.includes('unavailable') ? '⚠️' : '📍'} ${swap.distance}${swap.distance.includes('unavailable') ? '' : ' away'}</div>` : ''}
                       <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${swap.amount}</div>
                       <div class="swap-type" style="margin-bottom: 10px;">
                         <span class="swap-type-badge ${swap.type === 'need_cash' ? 'type-upi' : 'type-cash'}" style="font-size: 0.8rem;">
@@ -2364,6 +2376,10 @@
         async function fetchCurrentUser() {
             try {
                 const response = await fetch('/api/auth/me'); // We need to add this endpoint
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
                 if (response.ok) {
                     const data = await response.json();
                     currentUserId = data.id;

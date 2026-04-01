@@ -37,14 +37,16 @@ exports.createSwap = async (req, res) => {
         const isAutoAcceptPerfect = req.body.auto_accept_perfect !== false && req.body.auto_accept_perfect !== 'false';
         const parsedAmount = parseFloat(amount);
 
-        // 1. Insert the PARENT swap request initially
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect]);
-        const newParentSwapId = result.insertId;
-
-        // --- NEW: Respect User's auto_match preference ---
-        const [userRows] = await promisePool.execute('SELECT auto_match FROM users WHERE id = ?', [userId]);
+        // --- NEW: Respect User's auto_match preference and fetch location ---
+        const [userRows] = await promisePool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
+        const userLat = userRows.length > 0 ? userRows[0].latitude : null;
+        const userLng = userRows.length > 0 ? userRows[0].longitude : null;
+
+        // 1. Insert the PARENT swap request initially
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng]);
+        const newParentSwapId = result.insertId;
 
         if (!userAutoMatch) {
             console.log(`Auto-match disabled for user ${userId}. Skipping matching logic.`);
@@ -169,10 +171,10 @@ exports.createSwap = async (req, res) => {
 
                 // Create CHILD SWAP representing the exact match chunk
                 const [childResult] = await promisePool.execute(`
-                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
                 `, [
-                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id
+                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id, userLat, userLng
                 ]);
 
                 matchedChunks.push({
@@ -1010,8 +1012,8 @@ exports.getSwapFeed = async (req, res) => {
               s.id,
               s.user_id,
               u.name,
-              u.latitude as creator_lat,
-              u.longitude as creator_lng,
+              s.latitude as creator_lat,
+              s.longitude as creator_lng,
               s.amount,
               s.type,
               s.status,
@@ -1102,6 +1104,8 @@ exports.getSwapFeed = async (req, res) => {
         finalSwaps = finalSwaps.map(s => {
             if (s.distanceVal !== null) {
                 s.distance = Math.round(s.distanceVal) + "m";
+            } else {
+                s.distance = "Location unavailable";
             }
             return s;
         });
