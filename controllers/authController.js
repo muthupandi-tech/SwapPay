@@ -1,5 +1,6 @@
 const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
+const emailService = require('../utils/emailService');
 
 // Database connection using the configured details
 const pool = mysql.createPool({
@@ -30,15 +31,20 @@ exports.registerUser = async (req, res) => {
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // 5 minutes expiry
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
         // Store user in MySQL database
-        const query = 'INSERT INTO users (name, phone, email, college, password) VALUES (?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(query, [name, phone, email, college, hashedPassword]);
+        const query = 'INSERT INTO users (name, phone, email, college, password, is_verified, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?, FALSE, ?, ?)';
+        const [result] = await promisePool.execute(query, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
 
-        // Automatically log the user in after successful registration
-        req.session.userId = result.insertId;
-        req.session.userName = name;
+        // Send OTP Email
+        await emailService.sendOTPEmail(email, otp);
 
-        return res.redirect('/dashboard');
+        // Redirect to OTP verification page
+        return res.redirect(`/verify-otp?email=${encodeURIComponent(email)}`);
     } catch (error) {
         console.error('Registration Error:', error);
         if (error.code === 'ER_DUP_ENTRY') {
@@ -63,6 +69,10 @@ exports.loginUser = async (req, res) => {
         }
 
         const user = rows[0];
+
+        if (!user.is_verified) {
+            return res.status(401).send(`Please verify your email first.<br><br><a href="/verify-otp?email=${encodeURIComponent(email)}">Click here to verify</a>`);
+        }
 
         if (user.is_blocked) {
             return res.status(403).send('Your account has been blocked by an administrator.');
@@ -140,5 +150,75 @@ exports.getCurrentUser = async (req, res) => {
         }
     } else {
         return res.status(401).json({ error: 'Not authenticated' });
+    }
+};
+
+exports.verifyOTP = async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+    }
+
+    try {
+        const [rows] = await promisePool.execute('SELECT id, otp_code, otp_expiry, is_verified FROM users WHERE email = ?', [email]);
+        if (rows.length === 0) {
+            return res.status(400).json({ success: false, message: 'User not found.' });
+        }
+
+        const user = rows[0];
+        if (user.is_verified) {
+            return res.status(400).json({ success: false, message: 'Account is already verified.' });
+        }
+
+        if (user.otp_code !== otp) {
+            return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+        }
+
+        const now = new Date();
+        if (new Date(user.otp_expiry) < now) {
+            return res.status(400).json({ success: false, message: 'OTP has expired.' });
+        }
+
+        // Verify user and clear OTP
+        await promisePool.execute('UPDATE users SET is_verified = TRUE, otp_code = NULL, otp_expiry = NULL WHERE id = ?', [user.id]);
+
+        return res.json({ success: true, message: 'Email verified successfully! You can now log in.' });
+    } catch (error) {
+        console.error('Verify OTP Error:', error);
+        return res.status(500).json({ success: false, message: 'Server error during verification.' });
+    }
+};
+
+exports.resendOTP = async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    try {
+        const [rows] = await promisePool.execute('SELECT id, is_verified FROM users WHERE email = ?', [email]);
+        if (rows.length === 0) {
+            return res.status(400).json({ success: false, message: 'User not found.' });
+        }
+
+        if (rows[0].is_verified) {
+            return res.status(400).json({ success: false, message: 'Account is already verified.' });
+        }
+
+        // Generate new 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // 5 minutes expiry
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+        await promisePool.execute('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE id = ?', [otp, otpExpiry, rows[0].id]);
+
+        // Send OTP Email
+        await emailService.sendOTPEmail(email, otp);
+
+        return res.json({ success: true, message: 'A new OTP has been sent to your email.' });
+    } catch (error) {
+        console.error('Resend OTP Error:', error);
+        return res.status(500).json({ success: false, message: 'Server error during OTP logic.' });
     }
 };

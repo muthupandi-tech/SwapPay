@@ -210,6 +210,13 @@ app.get('/register', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'register.html'));
 });
 
+app.get('/verify-otp', (req, res) => {
+    if (req.session && req.session.userId) {
+        return res.redirect('/dashboard');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'verify-otp.html'));
+});
+
 // Protected Route for Dashboard
 app.get('/dashboard', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));

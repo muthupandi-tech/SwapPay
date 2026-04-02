@@ -125,6 +125,44 @@ async function sendSwapCreatedEmail(toEmail, swapType, amount, location) {
 }
 
 /**
+ * 0. Send OTP Verification Email
+ */
+async function sendOTPEmail(toEmail, otp) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const content = `
+        <h3 style="color: #60a5fa; margin-top: 0;">Email Verification Required</h3>
+        <p>Welcome to SwapPay! To complete your registration, please verify your email address.</p>
+        
+        <div style="text-align: center; margin: 30px 0; padding: 20px; background-color: #f8fafc; border-radius: 8px;">
+            <p style="margin: 0 0 10px 0; color: #475569;">Your One-Time Password (OTP) is:</p>
+            <div style="font-size: 36px; letter-spacing: 12px; margin-bottom: 10px; font-weight: 800; color: #1e293b; font-family: monospace;">${otp}</div>
+        </div>
+        
+        <p style="color: #ef4444; font-weight: bold; text-align: center;">This OTP expires in exactly 5 minutes.</p>
+        <p>If you did not attempt to register an account with us, please ignore this email safely.</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Verification" <${senderEmail}>`,
+        to: toEmail,
+        subject: "🔒 SwapPay OTP Verification",
+        html: getEmailTemplateWrapper("Verify Your Email", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent OTP Verification Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send OTP email to ${toEmail}:`, error);
+    }
+}
+
+/**
  * 1. Swap Matched Email Template
  */
 async function sendSwapMatchedEmail(toEmail, partnerName, partnerEmail, swapType, amount, location) {
@@ -554,5 +592,6 @@ module.exports = {
     sendPendingReminderEmail,
     sendPartialMatchEmail,
     sendMultiplePartnersAvailableEmail,
-    sendBestMatchFoundEmail
+    sendBestMatchFoundEmail,
+    sendOTPEmail
 };
