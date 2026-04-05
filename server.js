@@ -153,6 +153,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/chat', chatRoutes); // Mount chat API
 
+const contactRoutes = require('./routes/contactRoutes');
+app.use('/api/contact', contactRoutes);
+
 const requireAdminAPI = (req, res, next) => {
     if (req.session && req.session.userId && req.session.role === 'admin') {
         return next();

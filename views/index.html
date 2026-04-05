@@ -20,6 +20,8 @@
         <ul class="nav-links">
             <li><a href="#how">How it Works</a></li>
             <li><a href="#features">Features</a></li>
+            <li><a href="#about">About Developer</a></li>
+            <li><a href="#contact">Contact</a></li>
             <li><a href="/login" class="btn-login">Login</a></li>
         </ul>
     </nav>
@@ -128,7 +130,91 @@
         </div>
     </section>
 
+    <section id="about" class="features-section">
+        <div class="section-header">
+            <h2>About <span>Me</span></h2>
+            <p>The Developer behind SwapPay</p>
+        </div>
+        <div class="about-container">
+            <!-- Left Side: Image -->
+            <div class="about-image">
+                <div class="about-img-wrapper">
+                    <!-- Ensure the uploaded profile image is saved at this path -->
+                    <img src="/images/profile.jpg" alt="Muthu Pandi">
+                </div>
+            </div>
+            
+            <!-- Right Side: Content -->
+            <div class="about-content">
+                <h3 class="about-name">Muthu Pandi</h3>
+                <h4 class="about-role">Full Stack Developer</h4>
+                
+                <div class="about-badges">
+                    <span class="about-badge">🎓 ECE Student</span>
+                    <span class="about-badge">💡 Problem Solver</span>
+                    <span class="about-badge">🚀 Builder</span>
+                </div>
+                
+                <div class="about-text">
+                    <p>
+                        Hi, I'm <strong>Muthu Pandi</strong>, a 3rd year Electronics and Communication Engineering (ECE) student who is passionate about technology and building useful products.
+                    </p>
+                    <p>
+                        I didn’t come from a privileged background, but I believe in learning step by step with consistency. For me, development is not just coding — it’s about finding real problems and creating simple solutions for them.
+                    </p>
+                    <p>
+                        The idea for my project, <strong style="color: var(--accent-secondary);">SwapPay</strong>, came from my college life. I noticed that many students struggle to exchange cash and UPI during urgent situations. So I built SwapPay — a platform where students can easily find and exchange money with each other.
+                    </p>
+                    <p>
+                        Through this journey, I learned how to solve real-world problems, improve user experience, and keep growing as a developer.
+                    </p>
+                    <p>
+                        My goal is to become a strong software engineer and build products that truly help people in their daily life.
+                    </p>
+                </div>
+
+                <div class="about-quote">
+                    "Success doesn’t come from comfort — it comes from solving real problems with consistency."
+                </div>
+
+                <div class="about-actions">
+                    <!-- Ensure your resume is placed in the public/ folder as resume.pdf -->
+                    <a href="/resume.pdf" download="Muthu_Pandi_Resume.pdf" class="btn-primary">Download Resume</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="features-section" style="border-top: 1px solid var(--glass-border);">
+        <div class="section-header">
+            <h2>Contact <span>Developer</span></h2>
+            <p>Have a question or feedback? Send me a message!</p>
+        </div>
+        <div class="contact-container" style="max-width: 600px; margin: 0 auto; background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 2.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <form id="contactForm">
+                <div style="margin-bottom: 1.5rem;">
+                    <label for="name" style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 500;">Name</label>
+                    <input type="text" id="name" name="name" required placeholder="Your Name" 
+                        style="width: 100%; padding: 0.8rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); font-family: inherit; outline: none; transition: border-color 0.3s;">
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label for="email" style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 500;">Email Address</label>
+                    <input type="email" id="email" name="email" required placeholder="your.email@example.com" 
+                        style="width: 100%; padding: 0.8rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); font-family: inherit; outline: none; transition: border-color 0.3s;">
+                </div>
+                <div style="margin-bottom: 2rem;">
+                    <label for="message" style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 500;">Message</label>
+                    <textarea id="message" name="message" required placeholder="Your message here..." rows="5" 
+                        style="width: 100%; padding: 0.8rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); font-family: inherit; outline: none; resize: vertical; transition: border-color 0.3s;"></textarea>
+                </div>
+                <button type="submit" id="sendMessageBtn" class="btn-primary" style="width: 100%; border: none; cursor: pointer;">Send Message</button>
+                <div id="contactStatus" style="margin-top: 1.5rem; text-align: center; font-weight: 500; display: none;"></div>
+            </form>
+        </div>
+    </section>
+
     <script src="/js/main.js"></script>
+    <script src="/js/contact.js"></script>
 </body>
 
 </html>

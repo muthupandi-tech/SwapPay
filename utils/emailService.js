@@ -629,6 +629,42 @@ async function sendTrustWarningEmail(toEmail, currentStars) {
     }
 }
 
+/**
+ * Contact Developer Email Template
+ */
+async function sendContactEmail(name, email, message) {
+    const t = await getTransporter();
+
+    // Since this email goes to the developer, we can just use simple text or HTML.
+    const content = `
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <hr>
+            <p style="white-space: pre-wrap;">${message}</p>
+        </div>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Contact Form" <${senderEmail}>`,
+        to: "swappay.official@gmail.com", // Updated as requested
+        subject: "New Contact from SwapPay",
+        html: getEmailTemplateWrapper("Developer Contact Form", content),
+        replyTo: email
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Contact Email from ${email}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send contact email:`, error);
+        throw error;
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
@@ -640,5 +676,6 @@ module.exports = {
     sendMultiplePartnersAvailableEmail,
     sendBestMatchFoundEmail,
     sendOTPEmail,
-    sendTrustWarningEmail
+    sendTrustWarningEmail,
+    sendContactEmail
 };
