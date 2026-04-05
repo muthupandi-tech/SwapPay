@@ -1041,7 +1041,12 @@
     <main class="dashboard-container">
         <div id="trustWarningContainer"></div>
         <div class="dashboard-header">
-            <h1>Welcome to your <span>Dashboard</span></h1>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button id="backToAdmin" onclick="window.location.href='/admin/feedbacks'" style="display: none; align-self: flex-start; background: transparent; border: 1px solid var(--glass-border); padding: 0.4rem 0.8rem; border-radius: 6px; color: var(--text-secondary); cursor: pointer; transition: all 0.3s; font-size: 0.85rem;" onmouseover="this.style.color='var(--text-primary)'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='var(--text-secondary)'; this.style.borderColor='var(--glass-border)';">
+                    ← Back to Admin
+                </button>
+                <h1 style="margin: 0;">Welcome to your <span>Dashboard</span></h1>
+            </div>
             <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
                 <div class="profile-avatar">👤</div>
                 <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
@@ -2515,6 +2520,12 @@
                 if (response.ok) {
                     const data = await response.json();
                     currentUserId = data.id;
+                    if (data.role === 'admin') {
+                        const adminNav = document.getElementById('adminNavBtn');
+                        const backBtn = document.getElementById('backToAdmin');
+                        if (adminNav) adminNav.style.display = 'block';
+                        if (backBtn) backBtn.style.display = 'block';
+                    }
                     initializeSocket();
                 }
             } catch (err) {
