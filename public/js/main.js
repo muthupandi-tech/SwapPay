@@ -37,3 +37,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+/**
+ * Global Password Toggle Logic
+ * @param {string} inputId - The ID of the password input field
+ * @param {HTMLElement} btn - The button element that triggered the toggle
+ */
+window.togglePasswordVisibility = function(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerHTML = '🔒'; // Hide icon
+        btn.setAttribute('aria-label', 'Hide Password');
+    } else {
+        input.type = 'password';
+        btn.innerHTML = '👁️'; // Show icon
+        btn.setAttribute('aria-label', 'Show Password');
+    }
+    
+    // Add a quick feedback animation
+    btn.style.transform = 'scale(0.8)';
+    setTimeout(() => {
+        btn.style.transform = 'scale(1.1)';
+        setTimeout(() => btn.style.transform = '', 100);
+    }, 100);
+};

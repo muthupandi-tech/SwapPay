@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwapPay | Register</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .auth-container {
@@ -149,13 +149,23 @@
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="form-control"
-                        placeholder="Create a strong password" required>
+                    <div class="password-group">
+                        <input type="password" id="password" name="password" class="form-control"
+                            placeholder="Create a strong password" required>
+                        <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('password', this)" title="Toggle Password Visibility">
+                            👁️
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="confirmPassword">Confirm Password</label>
-                    <input type="password" id="confirmPassword" name="confirmPassword" class="form-control"
-                        placeholder="Repeat your password" required>
+                    <div class="password-group">
+                        <input type="password" id="confirmPassword" name="confirmPassword" class="form-control"
+                            placeholder="Repeat your password" required>
+                        <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('confirmPassword', this)" title="Toggle Password Visibility">
+                            👁️
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn-submit">Create Account</button>
             </form>
@@ -165,6 +175,7 @@
         </div>
     </main>
 
+    <script src="/js/main.js"></script>
     <script>
         document.getElementById('registerForm').addEventListener('submit', function (e) {
             const password = document.getElementById('password').value;

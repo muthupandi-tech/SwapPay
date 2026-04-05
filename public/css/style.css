@@ -1,10 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;600;700;800&display=swap');
+
 :root {
-    --bg-color: #0d0e15;
+    --bg-color: #0b0d17;
     --text-primary: #ffffff;
-    --text-secondary: #a0a5b1;
-    --accent-primary: #6c5ce7;
-    --accent-secondary: #00cec9;
-    --glass-bg: rgba(255, 255, 255, 0.05);
+    --text-secondary: #94a3b8;
+    --accent-primary: #4f46e5; /* Indigo */
+    --accent-secondary: #3b82f6; /* Blue */
+    --glass-bg: rgba(30, 41, 59, 0.4);
     --glass-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -15,11 +17,15 @@
 }
 
 body {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-primary);
     overflow-x: hidden;
     min-height: 100vh;
+}
+
+h1, h2, h3, h4, .logo {
+    font-family: 'Poppins', sans-serif;
 }
 
 /* Background Blobs for Visual Interest */
@@ -631,4 +637,41 @@ body {
     .step-card, .feature-card {
         padding: 2rem 1.5rem;
     }
+}
+
+/* Password Visibility Toggle Feature */
+.password-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-group .form-control {
+    padding-right: 3rem !important; /* Space for the toggle icon */
+}
+
+.toggle-password-btn {
+    position: absolute;
+    right: 1rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    user-select: none;
+    padding: 0;
+    z-index: 10;
+}
+
+.toggle-password-btn:hover {
+    color: var(--accent-secondary);
+    transform: scale(1.1);
+}
+
+.toggle-password-btn:active {
+    transform: scale(0.9);
 }

@@ -5,16 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwapPay - Admin Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-bg: #0f172a;
+            --primary-bg: #0b0d17;
             --secondary-bg: #1e293b;
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
-            --accent-primary: #3b82f6;
-            --accent-secondary: #8b5cf6;
+            --accent-primary: #4f46e5; /* Indigo */
+            --accent-secondary: #3b82f6; /* Blue */
             --accent-danger: #ef4444;
             --accent-success: #10b981;
             --glass-bg: rgba(30, 41, 59, 0.7);
@@ -25,7 +24,11 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        h1, h2, h3, .logo {
+            font-family: 'Poppins', sans-serif !important;
         }
 
         body {
@@ -95,6 +98,7 @@
             font-weight: 700;
             background: linear-gradient(135deg, var(--text-primary), var(--accent-secondary));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
