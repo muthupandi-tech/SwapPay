@@ -282,7 +282,7 @@ exports.getNearbySwaps = async (req, res) => {
     try {
         // Fetch active swaps and join with users table to get the requester's name AND average rating
         const query = `
-            SELECT s.id, s.type, s.amount, s.location, s.created_at, s.is_edited, u.name as requester_name,
+            SELECT s.id, s.type, s.remaining_amount as amount, s.location, s.created_at, s.is_edited, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
@@ -562,10 +562,36 @@ exports.getActiveSwaps = async (req, res) => {
             WHERE s.user_id = ? AND (s.status = 'active' OR s.status = 'open')
             ORDER BY s.created_at DESC
         `;
-        const [rows] = await promisePool.execute(query, [userId]);
+        const [parentRows] = await promisePool.execute(query, [userId]);
+        
+        let allRows = [...parentRows];
+
+        if (parentRows.length > 0) {
+            const parentIds = parentRows.map(r => r.id);
+            const placeholders = parentIds.map(() => '?').join(',');
+            const childQuery = `
+                SELECT s.*,
+                u1.name as creator_name, u2.name as matched_name,
+                (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
+                (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
+                FROM swaps s 
+                LEFT JOIN users u1 ON s.user_id = u1.id 
+                LEFT JOIN users u2 ON s.matched_user_id = u2.id
+                WHERE (s.parent_swap_id IN (${placeholders}) OR s.matched_parent_swap_id IN (${placeholders}))
+            `;
+            const [childRows] = await promisePool.execute(childQuery, [...parentIds, ...parentIds]);
+            
+            // Avoid duplicate rows if a query returns overlapping data
+            const existingIds = new Set(allRows.map(r => r.id));
+            childRows.forEach(row => {
+                if (!existingIds.has(row.id)) {
+                    allRows.push(row);
+                }
+            });
+        }
 
         // Add context for the frontend
-        const swapsWithContext = rows.map(swap => {
+        const swapsWithContext = allRows.map(swap => {
             return {
                 ...swap,
                 // Determine if the logged in user is the creator
@@ -1069,7 +1095,7 @@ exports.getSwapFeed = async (req, res) => {
               u.name,
               s.latitude as creator_lat,
               s.longitude as creator_lng,
-              s.amount,
+              s.remaining_amount as amount,
               s.type,
               s.status,
               s.is_edited,
@@ -1082,12 +1108,12 @@ exports.getSwapFeed = async (req, res) => {
         `;
 
         if (minAmount) {
-            query += " AND s.amount >= ?";
+            query += " AND s.remaining_amount >= ?";
             queryParams.push(parseFloat(minAmount));
         }
 
         if (maxAmount) {
-            query += " AND s.amount <= ?";
+            query += " AND s.remaining_amount <= ?";
             queryParams.push(parseFloat(maxAmount));
         }
 
