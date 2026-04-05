@@ -240,6 +240,15 @@ app.get('/admin', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'admin.html'));
 });
 
+// Support & Feedback Route
+app.get('/support', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'support.html'));
+});
+
+// API Routes mounting
+const supportRoutes = require('./routes/supportRoutes');
+app.use('/api/support', supportRoutes);
+
 // Start the server
 server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);

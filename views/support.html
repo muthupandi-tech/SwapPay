@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwapPay | Support & Feedback</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .support-container {
+            padding: 3rem 5%;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .support-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .support-header h1 { font-size: 2.8rem; margin-bottom: 0.5rem; }
+        .support-header h1 span { color: var(--accent-secondary); }
+        .support-header p { color: var(--text-secondary); font-size: 1.1rem; }
+
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 5px;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent-secondary);
+            color: black;
+        }
+
+        .support-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(15px);
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .support-card.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; }
+        
+        .form-control {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 15px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+            transition: 0.3s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        select.form-control { appearance: none; }
+
+        .rating-stars {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .star {
+            font-size: 2rem;
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.2);
+            transition: 0.2s;
+        }
+
+        .star.active { color: #fbbf24; }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: var(--accent-secondary);
+            color: black;
+            font-weight: 800;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 1rem;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(232, 67, 147, 0.3);
+        }
+
+        .help-item {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .help-item:last-child { border-bottom: none; }
+
+        .help-item h3 { color: var(--accent-secondary); margin-bottom: 0.5rem; font-size: 1.2rem; }
+        .help-item p { color: var(--text-secondary); line-height: 1.6; }
+
+        #successMessage {
+            text-align: center;
+            padding: 2rem;
+            display: none;
+        }
+
+        #successMessage h2 { color: var(--accent-secondary); font-size: 2rem; margin-bottom: 1rem; }
+
+        .char-count {
+            text-align: right;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <nav class="navbar">
+        <div class="logo">Swap<span>Pay</span></div>
+        <ul class="nav-links">
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="support-container">
+        <div class="support-header">
+            <h1>Support & <span>Feedback</span></h1>
+            <p>We're here to help you have the best experience.</p>
+        </div>
+
+        <div id="contentArea">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('feedback')">Feedback</button>
+                <button class="tab-btn" onclick="switchTab('issue')">Report Issue</button>
+                <button class="tab-btn" onclick="switchTab('help')">Help / FAQ</button>
+            </div>
+
+            <!-- Feedback Tab -->
+            <div id="feedbackCard" class="support-card active">
+                <form id="feedbackForm">
+                    <div class="form-group">
+                        <label>Rate your experience</label>
+                        <div class="rating-stars" id="feedbackStars">
+                            <span class="star" data-value="1">★</span>
+                            <span class="star" data-value="2">★</span>
+                            <span class="star" data-value="3">★</span>
+                            <span class="star" data-value="4">★</span>
+                            <span class="star" data-value="5">★</span>
+                        </div>
+                        <input type="hidden" name="rating" id="ratingInput" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Share your thoughts</label>
+                        <textarea class="form-control" name="message" id="feedbackMsg" rows="5" placeholder="What do you love? What can we improve?" maxlength="500"></textarea>
+                        <div class="char-count" id="feedbackCount">0/500</div>
+                    </div>
+                    <button type="submit" class="btn-submit">Submit Feedback</button>
+                </form>
+            </div>
+
+            <!-- Issue Tab -->
+            <div id="issueCard" class="support-card">
+                <form id="issueForm">
+                    <div class="form-group">
+                        <label>Issue Category</label>
+                        <select class="form-control" name="category" required>
+                            <option value="">Select Category</option>
+                            <option value="UI Bug">UI / Visual Bug</option>
+                            <option value="Matching Issue">Matching Issue</option>
+                            <option value="Payment Issue">Payment Issue</option>
+                            <option value="Chat Problem">Chat Problem</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea class="form-control" name="message" id="issueMsg" rows="5" placeholder="Please describe the problem in detail..." required maxlength="500"></textarea>
+                        <div class="char-count" id="issueCount">0/500</div>
+                    </div>
+                    <button type="submit" class="btn-submit">Report Issue</button>
+                </form>
+            </div>
+
+            <!-- Help Tab -->
+            <div id="helpCard" class="support-card">
+                <div class="help-item">
+                    <h3>How does matching work?</h3>
+                    <p>When you create a swap, the system looks for other users in your campus radius who need the opposite currency (e.g., you have UPI and need Cash). Matches are either one-to-one or "crowd-swaps" where multiple users fulfill a larger request.</p>
+                </div>
+                <div class="help-item">
+                    <h3>What is Trust Score?</h3>
+                    <p>Your Trust Score is based on ratings from other users after completed swaps. A higher score makes your requests more visible. If your score drops below 2 stars, you'll need to complete recovery swaps to improve your standing.</p>
+                </div>
+                <div class="help-item">
+                    <h3>Is my money safe?</h3>
+                    <p>SwapPay facilitates matches by connecting users physically on campus. Always verify the transaction with your partner in person before marking a swap as completed.</p>
+                </div>
+                <div class="help-item">
+                    <h3>How do I delete a swap?</h3>
+                    <p>You can delete an active swap from your "My Swap Activity" tab. Note that once a swap is matched, you must complete it or chat with your partner before it can be resolved.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="successMessage">
+            <h2>Thanks for your feedback ❤️</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Your contribution helps make SwapPay better for everyone.</p>
+            <button class="btn-submit" onclick="resetPage()">Back to Support</button>
+        </div>
+    </main>
+
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.support-card').forEach(card => card.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Card').classList.add('active');
+        }
+
+        // Star Rating Logic
+        const stars = document.querySelectorAll('.star');
+        const ratingInput = document.getElementById('ratingInput');
+        stars.forEach(star => {
+            star.addEventListener('click', () => {
+                const val = parseInt(star.getAttribute('data-value'));
+                ratingInput.value = val;
+                stars.forEach(s => {
+                    if (parseInt(s.getAttribute('data-value')) <= val) {
+                        s.classList.add('active');
+                    } else {
+                        s.classList.remove('active');
+                    }
+                });
+            });
+        });
+
+        // Char Count Logic
+        function setupCharCount(textareaId, countId) {
+            const textarea = document.getElementById(textareaId);
+            const count = document.getElementById(countId);
+            textarea.addEventListener('input', () => {
+                count.textContent = `${textarea.value.length}/500`;
+            });
+        }
+        setupCharCount('feedbackMsg', 'feedbackCount');
+        setupCharCount('issueMsg', 'issueCount');
+
+        // Form Submissions
+        async function submitForm(type, formData) {
+            try {
+                formData.type = type;
+                const response = await fetch('/api/support/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showSuccess();
+                } else {
+                    alert(result.error || 'Something went wrong.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error. Please try again.');
+            }
+        }
+
+        document.getElementById('feedbackForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const rating = parseInt(ratingInput.value);
+            const message = document.getElementById('feedbackMsg').value;
+            if (rating === 0) return alert('Please select a star rating.');
+            if (!message.trim()) return alert('Please enter your feedback.');
+            submitForm('feedback', { rating, message });
+        });
+
+        document.getElementById('issueForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const category = e.target.category.value;
+            const message = document.getElementById('issueMsg').value;
+            submitForm('issue', { category, message });
+        });
+
+        function showSuccess() {
+            document.getElementById('contentArea').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'block';
+        }
+
+        function resetPage() {
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
