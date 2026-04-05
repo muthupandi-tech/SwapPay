@@ -13,4 +13,9 @@ router.put('/block/:id', adminController.blockUser);
 router.get('/settings', adminController.getSettings);
 router.put('/settings', adminController.updateSettings);
 
+// Feedback Management
+router.get('/feedbacks', adminController.getAllFeedbacks);
+router.put('/feedback/:id', adminController.updateFeedbackStatus);
+router.delete('/feedback/:id', adminController.deleteFeedback);
+
 module.exports = router;

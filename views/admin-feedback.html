@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Feedback Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: rgba(15, 23, 42, 0.9);
+            border-right: 1px solid var(--glass-border);
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+        }
+
+        .sidebar-logo { font-size: 1.8rem; font-weight: 800; margin-bottom: 3rem; color: #fff; }
+        .sidebar-logo span { color: var(--accent-secondary); }
+
+        .sidebar-nav { list-style: none; }
+        .sidebar-nav li { margin-bottom: 1rem; }
+        .sidebar-nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            border-radius: 12px;
+            transition: 0.3s;
+        }
+
+        .sidebar-nav a:hover, .sidebar-nav a.active {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent-secondary);
+        }
+
+        .main-content {
+            padding: 3rem;
+            background: #0f172a;
+            overflow-y: auto;
+        }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; }
+        .header h1 { font-size: 2.5rem; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 1.5rem;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .stat-card h3 { font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .stat-card .value { font-size: 2.2rem; font-weight: 800; color: var(--accent-secondary); }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 150px 150px 120px;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 15px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: #fff;
+            font-family: inherit;
+        }
+
+        .filter-select {
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: #fff;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .feedback-table-container {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: rgba(255, 255, 255, 0.05); padding: 1.2rem; color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; }
+        td { padding: 1.2rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; }
+
+        .user-cell { display: flex; flex-direction: column; }
+        .user-name { font-weight: 700; color: #fff; }
+        .user-email { font-size: 0.8rem; color: var(--text-secondary); }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .badge-feedback { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-issue { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .badge-resolved { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .badge-open { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        .rating-cell { color: #fbbf24; font-weight: 700; }
+
+        .actions { display: flex; gap: 8px; }
+        .btn-action {
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.8rem;
+        }
+
+        .btn-resolve:hover { background: #166534; color: #fff; border-color: #22c55e; }
+        .btn-delete:hover { background: #991b1b; color: #fff; border-color: #ef4444; }
+
+        .msg-cell { max-width: 300px; font-size: 0.9rem; line-height: 1.4; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <aside class="sidebar">
+            <div class="sidebar-logo">Swap<span>Pay</span></div>
+            <ul class="sidebar-nav">
+                <li><a href="/admin">📊 Overview</a></li>
+                <li><a href="/admin/feedbacks" class="active">💬 Feedback Management</a></li>
+                <li><a href="/dashboard">🏠 User Dashboard</a></li>
+            </ul>
+        </aside>
+
+        <main class="main-content">
+            <div class="header">
+                <h1>Feedback <span>Management</span></h1>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Submissions</h3>
+                    <div class="value" id="statTotal">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Technical Issues</h3>
+                    <div class="value" id="statIssues">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg User Rating</h3>
+                    <div class="value" id="statAvgRating">-</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search by name or message..." oninput="renderTable()">
+                </div>
+                <select class="filter-select" id="typeFilter" onchange="renderTable()">
+                    <option value="">All Types</option>
+                    <option value="feedback">Feedback</option>
+                    <option value="issue">Issue</option>
+                </select>
+                <select class="filter-select" id="ratingFilter" onchange="renderTable()">
+                    <option value="">All Ratings</option>
+                    <option value="5">5 Stars</option>
+                    <option value="4">4+ Stars</option>
+                    <option value="3">3+ Stars</option>
+                </select>
+                <select class="filter-select" id="statusFilter" onchange="renderTable()">
+                    <option value="">All Status</option>
+                    <option value="open">Open</option>
+                    <option value="resolved">Resolved</option>
+                </select>
+            </div>
+
+            <div class="feedback-table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Type / Category</th>
+                            <th>Rating</th>
+                            <th>Message</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="feedbackTableBody">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allFeedbacks = [];
+
+        async function loadFeedbacks() {
+            try {
+                const res = await fetch('/api/admin/feedbacks');
+                if (!res.ok) throw new Error('Unauthorized');
+                allFeedbacks = await res.json();
+                updateStats();
+                renderTable();
+            } catch (err) {
+                console.error(err);
+                if (err.message === 'Unauthorized') window.location.href = '/dashboard';
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').innerText = allFeedbacks.length;
+            const issues = allFeedbacks.filter(f => f.type === 'issue').length;
+            document.getElementById('statIssues').innerText = issues;
+            
+            const withRatings = allFeedbacks.filter(f => f.rating);
+            const avg = withRatings.length ? (withRatings.reduce((sum, f) => sum + f.rating, 0) / withRatings.length).toFixed(1) : 'N/A';
+            document.getElementById('statAvgRating').innerText = avg === 'N/A' ? avg : avg + ' / 5';
+        }
+
+        function renderTable() {
+            const tableBody = document.getElementById('feedbackTableBody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const typeF = document.getElementById('typeFilter').value;
+            const ratingF = document.getElementById('ratingFilter').value;
+            const statusF = document.getElementById('statusFilter').value;
+
+            const filtered = allFeedbacks.filter(f => {
+                const matchesSearch = f.user_name.toLowerCase().includes(search) || f.message.toLowerCase().includes(search);
+                const matchesType = !typeF || f.type === typeF;
+                const matchesRating = !ratingF || (f.rating && f.rating >= parseInt(ratingF));
+                const matchesStatus = !statusF || f.status === statusF;
+                return matchesSearch && matchesType && matchesRating && matchesStatus;
+            });
+
+            tableBody.innerHTML = '';
+            if (filtered.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 3rem; color: var(--text-secondary);">No submissions found matching criteria.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(f => {
+                const date = new Date(f.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                const typeBadge = `<span class="badge badge-${f.type}">${f.type}</span>`;
+                const statusBadge = `<span class="badge badge-${f.status || 'open'}">${f.status || 'open'}</span>`;
+                const category = f.category ? `<br><small style="color: var(--text-secondary)">${f.category}</small>` : '';
+
+                const resolveBtn = (f.status === 'open' || !f.status) ? 
+                    `<button class="btn-action btn-resolve" onclick="updateStatus(${f.id}, 'resolved')">Resolve</button>` : '';
+
+                const row = `
+                    <tr>
+                        <td class="user-cell">
+                            <span class="user-name">${f.user_name}</span>
+                            <span class="user-email">${f.user_email}</span>
+                        </td>
+                        <td>${typeBadge}${category}</td>
+                        <td class="rating-cell">${f.rating ? f.rating + ' ★' : '-'}</td>
+                        <td class="msg-cell">${f.message}</td>
+                        <td>${date}</td>
+                        <td>${statusBadge}</td>
+                        <td class="actions">
+                            ${resolveBtn}
+                            <button class="btn-action btn-delete" onclick="deleteFeedback(${f.id})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        async function updateStatus(id, status) {
+            if (!confirm(`Mark this as ${status}?`)) return;
+            try {
+                const res = await fetch(`/api/admin/feedback/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                if (res.ok) {
+                    allFeedbacks = allFeedbacks.map(f => f.id === id ? { ...f, status } : f);
+                    updateStats();
+                    renderTable();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteFeedback(id) {
+            if (!confirm('Permanently delete this submission?')) return;
+            try {
+                const res = await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    allFeedbacks = allFeedbacks.filter(f => f.id !== id);
+                    updateStats();
+                    renderTable();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadFeedbacks);
+    </script>
+</body>
+</html>

@@ -240,6 +240,14 @@ app.get('/admin', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'admin.html'));
 });
 
+// Admin Feedback Page
+app.get('/admin/feedbacks', requireLogin, (req, res) => {
+    if (req.session.role !== 'admin') {
+        return res.redirect('/dashboard');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'admin-feedback.html'));
+});
+
 // Support & Feedback Route
 app.get('/support', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'support.html'));

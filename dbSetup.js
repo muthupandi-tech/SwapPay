@@ -172,41 +172,45 @@ connection.connect((err) => {
                                             console.error('Error creating chat_messages table:', err);
                                         } else {
                                             console.log('Table "chat_messages" is ready.');
- 
-                                             const createFeedbacksTableQuery = `
-                                                 CREATE TABLE IF NOT EXISTS feedbacks (
-                                                     id INT AUTO_INCREMENT PRIMARY KEY,
-                                                     user_id INT NOT NULL,
-                                                     type VARCHAR(20),
-                                                     category VARCHAR(50) NULL,
-                                                     message TEXT,
-                                                     rating INT NULL,
-                                                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                                                 )
-                                             `;
- 
-                                             connection.query(createFeedbacksTableQuery, (err) => {
-                                                 if (err) {
-                                                     console.error('Error creating feedbacks table:', err);
-                                                 } else {
-                                                     console.log('Table "feedbacks" is ready.');
-                                                 }
-                                             });
 
-                                            // Seed default email notification setting
-                                            const seedSettingQuery = `
-                                        INSERT IGNORE INTO settings (setting_key, setting_value) 
-                                        VALUES ('email_notifications_enabled', 'true'),
-                                               ('reminder_interval_hours', '1'),
-                                               ('max_reminders', '6')
-                                    `;
-                                    connection.query(seedSettingQuery, (err) => {
-                                        if (err) console.error('Error seeding default settings:', err);
-                                        else console.log('Default settings seeded (if not already present).');
+                                            const createFeedbacksTableQuery = `
+                                                CREATE TABLE IF NOT EXISTS feedbacks (
+                                                    id INT AUTO_INCREMENT PRIMARY KEY,
+                                                    user_id INT NOT NULL,
+                                                    type VARCHAR(20),
+                                                    category VARCHAR(50) NULL,
+                                                    message TEXT,
+                                                    rating INT NULL,
+                                                    status VARCHAR(20) DEFAULT 'open',
+                                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                                                )
+                                            `;
 
-                                        // Close connection
-                                        connection.end();
+                                            connection.query(createFeedbacksTableQuery, (err) => {
+                                                if (err) {
+                                                    console.error('Error creating feedbacks table:', err);
+                                                } else {
+                                                    console.log('Table "feedbacks" is ready.');
+                                                    
+                                                    // Seed default settings after all tables are ready
+                                                    const seedSettingQuery = `
+                                                        INSERT IGNORE INTO settings (setting_key, setting_value) 
+                                                        VALUES ('email_notifications_enabled', 'true'),
+                                                               ('reminder_interval_hours', '1'),
+                                                               ('max_reminders', '6')
+                                                    `;
+
+                                                    connection.query(seedSettingQuery, (err) => {
+                                                        if (err) console.error('Error seeding default settings:', err);
+                                                        else console.log('Default settings seeded (if not already present).');
+                                                        
+                                                        // Close connection
+                                                        connection.end();
+                                                    });
+                                                }
+                                            });
+                                        }
                                     });
                                 }
                             });

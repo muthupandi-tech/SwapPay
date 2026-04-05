@@ -153,3 +153,47 @@ exports.updateSettings = async (req, res) => {
         res.status(500).json({ error: 'Failed to update settings.' });
     }
 };
+
+// --- Feedback Management ---
+
+exports.getAllFeedbacks = async (req, res) => {
+    try {
+        const query = `
+            SELECT f.*, u.name as user_name, u.email as user_email
+            FROM feedbacks f
+            JOIN users u ON f.user_id = u.id
+            ORDER BY f.created_at DESC
+        `;
+        const [rows] = await promisePool.execute(query);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching admin feedbacks:', error);
+        res.status(500).json({ error: 'Failed to fetch feedbacks.' });
+    }
+};
+
+exports.updateFeedbackStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        
+        if (!status) return res.status(400).json({ error: 'Status is required' });
+
+        await promisePool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
+        res.json({ message: `Feedback marked as ${status}` });
+    } catch (error) {
+        console.error('Error updating feedback status:', error);
+        res.status(500).json({ error: 'Failed to update feedback status.' });
+    }
+};
+
+exports.deleteFeedback = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await promisePool.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
+        res.json({ message: 'Feedback deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting feedback:', error);
+        res.status(500).json({ error: 'Failed to delete feedback.' });
+    }
+};
