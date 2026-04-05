@@ -49,6 +49,7 @@ connection.connect((err) => {
                     notification_sound BOOLEAN DEFAULT TRUE,
                     notification_vibration BOOLEAN DEFAULT TRUE,
                     notification_animation BOOLEAN DEFAULT TRUE,
+                    recovery_progress INT DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `;

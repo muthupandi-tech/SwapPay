@@ -583,6 +583,52 @@ async function sendBestMatchFoundEmail(toEmail, myAmount, partnerName, partnerAm
     }
 }
 
+/**
+ * 5. Low Trust Warning Email Template
+ */
+async function sendTrustWarningEmail(toEmail, currentStars) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const starDisplay = '⭐'.repeat(Math.round(currentStars)) + '☆'.repeat(5 - Math.round(currentStars));
+
+    const content = `
+        <div style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 8px;">
+            <h3 style="color: #ef4444; margin-top: 0;">⚠️ Low Trust Score Warning</h3>
+            <p>We've noticed your current trust score has dropped to <strong>${currentStars.toFixed(1)} / 5 stars</strong>.</p>
+            <div style="font-size: 24px; letter-spacing: 5px; margin: 15px 0;">${starDisplay}</div>
+        </div>
+        
+        <p>At SwapPay, mutual trust is the foundation of our community. A low score significantly reduces your request visibility to other users.</p>
+        
+        <p><strong>To improve your score:</strong></p>
+        <ul style="color: #475569; line-height: 1.6;">
+            <li>Be prompt and communicative during swaps.</li>
+            <li>Always meet in person and complete exchanges as agreed.</li>
+            <li>Maintain respectful behavior towards your swap partners.</li>
+        </ul>
+        
+        <p>Positive ratings on your next few swaps will quickly bring your score back up! We value your membership in our community and want to help you stay active.</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Safety Team" <${senderEmail}>`,
+        to: toEmail,
+        subject: "⚠️ Warning: Your Trust Score is Low",
+        html: getEmailTemplateWrapper("Community Safety Notice", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Trust Warning Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send warning email to ${toEmail}:`, error);
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
@@ -593,5 +639,6 @@ module.exports = {
     sendPartialMatchEmail,
     sendMultiplePartnersAvailableEmail,
     sendBestMatchFoundEmail,
-    sendOTPEmail
+    sendOTPEmail,
+    sendTrustWarningEmail
 };

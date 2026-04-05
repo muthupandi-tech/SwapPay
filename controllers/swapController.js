@@ -370,6 +370,30 @@ exports.completeSwap = async (req, res) => {
         if (newStatus === 'completed') {
             // Both have completed! Finalize it.
 
+            // --- NEW: Trust Recovery System ---
+            for (let uid of [swap.user_id, swap.matched_user_id]) {
+                if (!uid) continue;
+                const [trustRows] = await promisePool.execute('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?', [uid]);
+                const avgStars = parseFloat(trustRows[0].avg_stars);
+                if (!isNaN(avgStars) && avgStars < 2) {
+                    const [uRow] = await promisePool.execute('SELECT recovery_progress FROM users WHERE id = ?', [uid]);
+                    if (uRow.length > 0) {
+                        let prog = (uRow[0].recovery_progress || 0) + 1;
+                        if (prog >= 2) {
+                            await promisePool.execute('UPDATE users SET recovery_progress = 0 WHERE id = ?', [uid]);
+                            const msg = "✅ Your account is back to good standing! Keep completing swaps to naturally improve your Trust Score.";
+                            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [uid, 'Account Restored', msg, 'system']);
+                            if (global.io) {
+                                global.io.to(`user_${uid}`).emit('notification', { title: 'Account Restored', message: msg, type: 'system', created_at: new Date() });
+                            }
+                        } else {
+                            await promisePool.execute('UPDATE users SET recovery_progress = ? WHERE id = ?', [prog, uid]);
+                        }
+                    }
+                }
+            }
+            // --- END NEW ---
+
             // Notify BOTH users
             const msg = `Swap exchange marked as completed! Don't forget to rate your partner.`;
             const title = 'Swap Completed';
@@ -504,7 +528,11 @@ exports.getDashboardStats = async (req, res) => {
         // Include user role for frontend logic
         const role = req.session.role || 'user';
 
-        res.status(200).json({ activeSwaps, totalExchanged, trustScore, role });
+        // Recovery progress
+        const [uRow] = await promisePool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
+        const recoveryProgress = uRow.length > 0 ? uRow[0].recovery_progress : 0;
+
+        res.status(200).json({ activeSwaps, totalExchanged, trustScore, role, avgStars, recoveryProgress });
     } catch (error) {
         console.error('Error calculating stats:', error);
         res.status(500).json({ error: 'An error occurred while fetching dashboard stats.' });
@@ -760,6 +788,29 @@ exports.rateSwap = async (req, res) => {
                     newTrustScore = Math.round((avgStars / 5) * 1000) / 10;
                 }
                 await sendRatingReceivedEmail(userRows[0].email, stars, newTrustScore);
+
+                // --- NEW: Low Trust Warning System ---
+                if (avgStars < 2) {
+                    const warningMsg = `Warning: Your Trust Score has dropped to ${avgStars.toFixed(1)} stars. Low trust scores reduce your visibility in the swap feed. Please maintain positive interactions to improve your score.`;
+                    const warningTitle = 'Trust Score Warning';
+                    
+                    // 1. Save Notification
+                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, warningTitle, warningMsg, 'warning']);
+                    
+                    // 2. Socket Alert
+                    if (global.io) {
+                        global.io.to(`user_${ratedUserId}`).emit('notification', {
+                            title: warningTitle,
+                            message: warningMsg,
+                            type: 'warning',
+                            created_at: new Date()
+                        });
+                    }
+
+                    // 3. Warning Email
+                    const { sendTrustWarningEmail } = require('../utils/emailService');
+                    await sendTrustWarningEmail(userRows[0].email, avgStars);
+                }
             }
         } catch (e) { console.error('Error in email block', e) }
 
@@ -1110,26 +1161,36 @@ exports.getSwapFeed = async (req, res) => {
             return s;
         });
 
-        // Apply sorting: 1. Nearest distance, 2. Higher trust score, 3. Latest created
+        // Apply sorting: 
+        // 0. Trust Tier (Score >= 2 before Score < 2)
+        // 1. Nearest distance, 2. Higher trust score, 3. Latest created
         finalSwaps.sort((a, b) => {
+            // 0. Trust Tier Check (Visibility Reduction for < 2 stars)
+            const scoreA = parseFloat(a.trustScore) || 0;
+            const scoreB = parseFloat(b.trustScore) || 0;
+            
+            const isLowTrustA = scoreA < 2;
+            const isLowTrustB = scoreB < 2;
+
+            if (isLowTrustA !== isLowTrustB) {
+                return isLowTrustA ? 1 : -1; // Low-trust users go to the bottom
+            }
+
             // 1. Nearest Distance
             const distA = a.distanceVal;
             const distB = b.distanceVal;
             if (distA !== null && distB !== null) {
                 const diff = distA - distB;
-                if (Math.abs(diff) > 1) { // Sort if difference is meaningful
+                if (Math.abs(diff) > 1) { 
                     return diff;
                 }
             } else if (distA !== null && distB === null) {
-                return -1; // Items with distance go first
+                return -1; 
             } else if (distA === null && distB !== null) {
                 return 1;
             }
 
-            // 2. Higher Trust Score
-            const scoreA = parseFloat(a.trustScore) || 0;
-            const scoreB = parseFloat(b.trustScore) || 0;
-
+            // 2. Higher Trust Score (Within same tier)
             if (scoreB !== scoreA) {
                 return scoreB - scoreA;
             }
@@ -1246,6 +1307,44 @@ exports.acceptSwap = async (req, res) => {
             'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
             [currentUserId]
         );
+
+        // --- NEW: Send Email Notifications to both parties ---
+        try {
+            const [requesterRows] = await promisePool.execute('SELECT name, email FROM users WHERE id = ?', [swap.user_id]);
+            const [accepterRows] = await promisePool.execute('SELECT name, email FROM users WHERE id = ?', [currentUserId]);
+
+            if (requesterRows.length > 0 && accepterRows.length > 0) {
+                const requester = requesterRows[0];
+                const accepter = accepterRows[0];
+                const { sendSwapMatchedEmail } = require('../utils/emailService');
+
+                // 1. Notify Requester (the one who posted the swap)
+                // Their partner is the CURRENT USER (Accepter)
+                await sendSwapMatchedEmail(
+                    requester.email, 
+                    accepter.name, 
+                    accepter.email, 
+                    swap.type, 
+                    swap.amount, 
+                    swap.location
+                );
+
+                // 2. Notify Accepter (the one who clicked "Accept")
+                // Their partner is the Original Requester
+                const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+                await sendSwapMatchedEmail(
+                    accepter.email, 
+                    requester.name, 
+                    requester.email, 
+                    oppositeType, 
+                    swap.amount, 
+                    swap.location
+                );
+            }
+        } catch (emailError) {
+            console.error("Email notification failed during acceptSwap:", emailError);
+            // We don't fail the whole request if email fails
+        }
 
         console.log("SUCCESS");
 

@@ -1039,6 +1039,7 @@
         </ul>
     </nav>
     <main class="dashboard-container">
+        <div id="trustWarningContainer"></div>
         <div class="dashboard-header">
             <h1>Welcome to your <span>Dashboard</span></h1>
             <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
@@ -1636,6 +1637,29 @@
                         }
 
                         prevStats = { activeSwaps: newActive, totalExchanged: newTotal, trustScore: newTrust };
+
+                        // --- NEW: Trust Recovery System Banner ---
+                        const warningContainer = document.getElementById('trustWarningContainer');
+                        if (data.avgStars !== undefined && parseFloat(data.avgStars) < 2) {
+                            const prog = data.recoveryProgress || 0;
+                            const perc = (prog / 2) * 100;
+                            warningContainer.innerHTML = `
+                                <div class="status-text warning" style="margin-bottom: 2rem; padding: 1.5rem; text-align: left; background: rgba(232, 67, 147, 0.1); border: 1px solid var(--accent-secondary);">
+                                    <h3 style="margin-bottom: 0.5rem; color: var(--accent-secondary);">⚠️ Your trust score is low.</h3>
+                                    <p style="color: var(--text-primary); margin-bottom: 1rem;">Complete 2 successful swaps to recover your reputation.</p>
+                                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                                        <span>Progress</span>
+                                        <span>${prog} / 2 Swaps</span>
+                                    </div>
+                                    <div style="width: 100%; background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; overflow: hidden;">
+                                        <div style="width: ${perc}%; background: var(--accent-secondary); height: 100%; border-radius: 5px; transition: width 0.5s;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            warningContainer.innerHTML = '';
+                        }
+                        // --- END NEW ---
                     }
                 }
             } catch (err) {

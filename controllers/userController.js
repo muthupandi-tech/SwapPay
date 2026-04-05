@@ -23,7 +23,7 @@ exports.getProfile = async (req, res) => {
 
         // Fetch User details
         const [userRows] = await promisePool.execute(
-            'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, created_at FROM users WHERE id = ?',
+            'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, recovery_progress, created_at FROM users WHERE id = ?',
             [userId]
         );
 
