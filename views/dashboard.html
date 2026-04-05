@@ -1079,6 +1079,16 @@
         </div>
         <div class="swaps-section" style="margin-top: 2rem;">
             <h2 class="swaps-header" style="font-size: 1.5rem; margin-bottom: 1rem;">My Swap Activity</h2>
+            
+            <div class="search-filter-container" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <input type="text" id="swapSearchInput" placeholder="Search swaps (Amount, User, Type)..." class="form-control" style="flex: 1; min-width: 250px; padding: 0.8rem 1.2rem; border-radius: 50px; background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border);" onkeyup="loadMySwaps()">
+                <div class="quick-filters" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                    <button class="filter-pill active" onclick="applyDateFilter('All', this)" style="padding: 0.5rem 1rem; border-radius: 50px; border: 1px solid var(--accent-secondary); background: var(--accent-secondary); color: black; cursor: pointer;">All</button>
+                    <button class="filter-pill" onclick="applyDateFilter('Today', this)" style="padding: 0.5rem 1rem; border-radius: 50px; border: 1px solid var(--accent-secondary); background: transparent; color: var(--text-primary); cursor: pointer;">Today</button>
+                    <button class="filter-pill" onclick="applyDateFilter('This Week', this)" style="padding: 0.5rem 1rem; border-radius: 50px; border: 1px solid var(--accent-secondary); background: transparent; color: var(--text-primary); cursor: pointer;">This Week</button>
+                </div>
+            </div>
+
             <div class="tabs-container">
                 <button class="tab-btn active" onclick="switchTab('active')">Active</button>
                 <button class="tab-btn" onclick="switchTab('matched')">Matched</button>
@@ -1754,6 +1764,13 @@
 
             const editedLabel = swap.is_edited ? '<span style="font-size: 0.7rem; color: var(--accent-primary); margin-left: 0.4rem; padding: 2px 6px; background: rgba(59,130,246,0.1); border-radius: 4px; border: 1px solid rgba(59,130,246,0.2);">edited</span>' : '';
 
+            let timeStrHTML = `<span>Posted:</span> <strong>${formatRelativeDate(swap.created_at)}</strong>`;
+            if (swap.status === 'completed' || currentTab === 'completed') {
+                const cDate = new Date(swap.completed_at || swap.created_at);
+                const formatOpts = { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true };
+                timeStrHTML = `<span>Completed:</span> <strong>${cDate.toLocaleString("en-IN", formatOpts)}</strong>`;
+            }
+
             return ` 
             <div class="swap-card ${statusClass}" data-swap-id="${swap.id}"> 
                 <div class="swap-card-header" > 
@@ -1769,11 +1786,58 @@
                     <span>Location:</span> <strong>${swap.location}</strong> 
                 </div> 
                 <div class="swap-detail" > 
-                    <span>Posted:</span> <strong>${new Date(swap.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>${editedLabel}
+                    ${timeStrHTML}${editedLabel}
                 </div> 
                 ${actionArea}
             </div> 
             `;
+        }
+
+        let currentSwapSearchInput = '';
+        let currentSwapDateFilter = 'All';
+
+        window.applyDateFilter = function(filterValue, btnEl) {
+            currentSwapDateFilter = filterValue;
+            const pills = document.querySelectorAll('.filter-pill');
+            pills.forEach(p => { p.classList.remove('active'); p.style.background = 'transparent'; p.style.color = 'var(--text-primary)'; });
+            btnEl.classList.add('active');
+            btnEl.style.background = 'var(--accent-secondary)';
+            btnEl.style.color = 'black';
+            loadMySwaps();
+        };
+
+        function formatRelativeDate(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now - date;
+            if (diffMs < 0) return 'Just now'; // sanity check
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} mins ago`;
+            
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            if (targetDate.getTime() === today.getTime()) return 'Today';
+            if (targetDate.getTime() === yesterday.getTime()) return 'Yesterday';
+            
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        
+        function getDateGroupHeader(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            if (targetDate.getTime() === today.getTime()) return 'Today';
+            if (targetDate.getTime() === yesterday.getTime()) return 'Yesterday';
+            return 'Earlier';
         }
 
         // Load My Swaps Activity
@@ -1797,14 +1861,96 @@
                 const data = await response.json();
                 const swaps = data.swaps || [];
 
+                // Grouping Logic for Crowd-Swap (useful for active & completed)
+                const parents = {};
+                const children = [];
+
+                if (currentTab !== 'matched') {
+                    swaps.forEach(swap => {
+                        let isParent = !swap.parent_swap_id && !swap.matched_parent_swap_id;
+                        if (isParent || (!swap.parent_swap_id && swap.isCreator)) {
+                            parents[swap.id] = { ...swap, childChunks: [] };
+                        } else {
+                            children.push(swap);
+                        }
+                    });
+
+                    children.forEach(child => {
+                        let myParentId = child.isCreator ? child.parent_swap_id : child.matched_parent_swap_id;
+                        if (parents[myParentId]) {
+                            parents[myParentId].childChunks.push(child);
+                        } else {
+                            parents[child.id] = { ...child, childChunks: [] };
+                        }
+                    });
+                }
+
+                // Determine base items
+                let baseItems = [];
                 if (currentTab === 'matched') {
-                    container.innerHTML = '';
-                    if (swaps.length === 0) {
-                        container.innerHTML = `<p style="color: var(--text-secondary);">No matched swaps.</p>`;
-                        return;
+                    baseItems = swaps;
+                } else {
+                    const groupedSwaps = Object.values(parents);
+                    baseItems = groupedSwaps.filter(swap => {
+                        if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open');
+                        return true;
+                    });
+                }
+
+                // 1. Search Query Filter
+                const searchQ = (document.getElementById('swapSearchInput')?.value || '').toLowerCase();
+                if (searchQ) {
+                    baseItems = baseItems.filter(s => {
+                        const amt = (s.amount || s.total_amount || '').toString();
+                        const userName = (s.otherPartyName || s.requester_name || s.accepter_name || s.matched_name || s.creator_name || '').toLowerCase();
+                        const type = (s.type || '').toLowerCase();
+                        return amt.includes(searchQ) || userName.includes(searchQ) || type.includes(searchQ);
+                    });
+                }
+
+                // 2. Date Filter
+                if (currentSwapDateFilter === 'Today') {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    baseItems = baseItems.filter(s => new Date(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= today.getTime());
+                } else if (currentSwapDateFilter === 'This Week') {
+                    const weekAgo = new Date();
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    weekAgo.setHours(0,0,0,0);
+                    baseItems = baseItems.filter(s => new Date(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= weekAgo.getTime());
+                }
+
+                container.innerHTML = '';
+                if (baseItems.length === 0) {
+                    container.innerHTML = `<p style="color: var(--text-secondary); text-align:center; padding: 2rem; width: 100%; grid-column: 1 / -1;">No swaps found.</p>`;
+                    return;
+                }
+
+                // Sort newest first
+                baseItems.sort((a,b) => new Date(b.completed_at || b.matched_time || b.posted_time || b.created_at) - new Date(a.completed_at || a.matched_time || a.posted_time || a.created_at));
+
+                let lastDateGroup = '';
+                let isFirstItem = true;
+                const cId = data.currentUserId;
+
+                baseItems.forEach(item => {
+                    // Date group divider
+                    const itemDate = new Date(item.completed_at || item.matched_time || item.posted_time || item.created_at);
+                    const groupHeader = getDateGroupHeader(itemDate);
+                    if (groupHeader !== lastDateGroup) {
+                        container.innerHTML += `<div class="date-divider" style="grid-column: 1 / -1; padding: 10px 0; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--accent-secondary); font-weight: bold; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">${groupHeader}</div>`;
+                        lastDateGroup = groupHeader;
                     }
-                    const cId = data.currentUserId;
-                    swaps.forEach(match => {
+
+                    // Highlight logic
+                    const relTime = formatRelativeDate(itemDate);
+                    const isNewest = isFirstItem && relTime === 'Just now';
+                    const glowStyle = isNewest ? 'box-shadow: 0 0 15px rgba(232, 67, 147, 0.4); border-color: var(--accent-secondary);' : '';
+                    isFirstItem = false;
+
+                    if (currentTab === 'matched') {
+                        // MATCHED RENDER
+                        const match = item;
                         const isRequester = match.requester_id === cId;
                         const rawOtherUser = isRequester ? match.accepter_name : match.requester_name;
                         const otherUser = rawOtherUser || "User";
@@ -1816,12 +1962,13 @@
                             tLabel = match.type === 'need_cash' ? 'Needs UPI' : 'Needs Cash';
                         }
                         const badgeClass = tLabel === 'Needs Cash' ? 'type-cash' : 'type-upi';
-                        
                         const locationStr = match.location || "Campus Area";
-                        const timeStr = new Date(match.posted_time || match.matched_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const timeStr = relTime;
+                        
+                        let statusText = match.status === 'pending_confirmation' ? 'Waiting for partner confirmation' : 'Swap Matched – Waiting for Completion';
                         
                         container.innerHTML += `
-<div class="swap-card match-card" style="border-color: var(--accent-secondary); margin-bottom: 1rem;">
+<div class="swap-card match-card" style="${glowStyle} margin-bottom: 1rem;">
   <div class="swap-card-header">
     <div>
       <h3 style="margin-bottom: 0.2rem; display: flex; align-items: center;">${otherUser} ${getTrustBadgeHTML(match.trustScore)}</h3>
@@ -1839,89 +1986,49 @@
       <span>Posted:</span> <strong>${timeStr}</strong> 
   </div> 
 
-  <div class="status-text warning" style="margin-top: 1rem;">${match.status === 'pending_confirmation' ? 'Waiting for partner confirmation' : 'Swap Matched – Waiting for Completion'}</div>
+  <div class="status-text warning" style="margin-top: 1rem;">${statusText}</div>
   <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
     <button class="btn-accept-swap" onclick="openChatModal(${match.swap_id}, '${otherUser}')" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6;">💬 Chat</button>
     <button class="btn-accept-swap" onclick="completeSwap(${match.swap_id})" style="flex: 1;">Mark as Completed</button>
   </div>
 </div>`;
-                    });
-                    return;
-                }
-
-                // Grouping Logic for Crowd-Swap
-                const parents = {};
-                const children = [];
-
-                swaps.forEach(swap => {
-                    // It's a parent if it has NO parent_swap_id AND (no matched_parent_swap_id OR it's a legacy old structure)
-                    let isParent = !swap.parent_swap_id && !swap.matched_parent_swap_id;
-                    
-                    if (isParent || (!swap.parent_swap_id && swap.isCreator)) {
-                        parents[swap.id] = { ...swap, childChunks: [] };
                     } else {
-                        children.push(swap);
-                    }
-                });
+                        // ACTIVE / COMPLETED RENDER
+                        const parentSwap = item;
+                        if (parentSwap.childChunks && parentSwap.childChunks.length > 0) {
+                            const total = parseFloat(parentSwap.total_amount) || parseFloat(parentSwap.amount);
+                            const remaining = parseFloat(parentSwap.remaining_amount) || 0;
+                            const matched = total - remaining;
+                            const progressPercent = Math.round((matched / total) * 100);
+                            
+                            let chunksHtml = parentSwap.childChunks.map(child => createSwapCardHTML(child, true)).join('');
 
-                children.forEach(child => {
-                    let myParentId = child.isCreator ? child.parent_swap_id : child.matched_parent_swap_id;
-                    if (parents[myParentId]) {
-                        parents[myParentId].childChunks.push(child);
-                    } else {
-                        // Orphaned child or legacy bug edge-case - just add it as its own parent to display it
-                        parents[child.id] = { ...child, childChunks: [] };
-                    }
-                });
-
-                const groupedSwaps = Object.values(parents);
-
-                // Filter based on tab (for 'active' we only show 'open' status if from my-swaps)
-                const filteredSwaps = groupedSwaps.filter(swap => {
-                    if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open');
-                    return true; // the endpoints for matched/completed are already filtered by the backend
-                });
-
-                container.innerHTML = '';
-
-                if (filteredSwaps.length === 0) {
-                    container.innerHTML = `<p style="color: var(--text-secondary);">No swaps yet.</p>`;
-                    return;
-                }
-
-                filteredSwaps.forEach(parentSwap => {
-                    if (parentSwap.childChunks && parentSwap.childChunks.length > 0) {
-                        const total = parseFloat(parentSwap.total_amount) || parseFloat(parentSwap.amount);
-                        const remaining = parseFloat(parentSwap.remaining_amount) || 0;
-                        const matched = total - remaining;
-                        const progressPercent = Math.round((matched / total) * 100);
-
-                        let chunksHtml = parentSwap.childChunks.map(child => createSwapCardHTML(child, true)).join('');
-
-                        container.innerHTML += `
-                            <div class="swap-card" style="grid-column: 1 / -1; border-color: var(--accent-secondary); gap: 0;">
-                                <div class="swap-card-header" style="margin-bottom: 1rem;">
-                                    <div>
-                                        <h3 style="margin-bottom: 0.2rem;">Crowd-Swap Container</h3>
-                                        <span class="swap-type-badge need-cash" style="background: rgba(232, 67, 147, 0.1); color: var(--accent-secondary);">₹${matched} Matched — ₹${remaining} Remaining</span>
-                                    </div>
-                                    <div style="text-align: right;">
-                                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary)">₹${total}</div>
-                                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Requested</div>
-                                    </div>
-                                </div>
-                                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 1.5rem;">
-                                    <div style="width: ${progressPercent}%; height: 100%; background: var(--accent-secondary);"></div>
-                                </div>
-                                
-                                <h4 style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Matched Contributors (${parentSwap.childChunks.length})</h4>
-                                <div class="swaps-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                                    ${chunksHtml}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        container.innerHTML += createSwapCardHTML(parentSwap, true);
+                            container.innerHTML += `
+<div class="swap-card" style="grid-column: 1 / -1; ${glowStyle} gap: 0;">
+    <div class="swap-card-header" style="margin-bottom: 1rem;">
+        <div>
+            <h3 style="margin-bottom: 0.2rem;">Crowd-Swap Container</h3>
+            <span class="swap-type-badge need-cash" style="background: rgba(232, 67, 147, 0.1); color: var(--accent-secondary);">₹${matched} Matched — ₹${remaining} Remaining</span>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary)">₹${total}</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Requested</div>
+        </div>
+    </div>
+    <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 1.5rem;">
+        <div style="width: ${progressPercent}%; height: 100%; background: var(--accent-secondary);"></div>
+    </div>
+    
+    <h4 style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Matched Contributors (${parentSwap.childChunks.length})</h4>
+    <div class="swaps-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+        ${chunksHtml}
+    </div>
+</div>`;
+                        } else {
+                            let childHtml = createSwapCardHTML(parentSwap, true);
+                            if (glowStyle) childHtml = childHtml.replace('class="swap-card"', `class="swap-card" style="${glowStyle}"`);
+                            container.innerHTML += childHtml;
+                        }
                     }
                 });
             } catch (err) {

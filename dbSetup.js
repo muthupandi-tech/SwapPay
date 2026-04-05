@@ -90,6 +90,7 @@ connection.connect((err) => {
                         last_reminder_sent TIMESTAMP NULL,
                         reminder_count INT DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at DATETIME NULL,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     )
                 `;

@@ -364,7 +364,11 @@ exports.completeSwap = async (req, res) => {
             newStatus = 'pending_confirmation';
         }
 
-        await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+        if (newStatus === 'completed') {
+            await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+        } else {
+            await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+        }
         await promisePool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
 
         if (newStatus === 'completed') {
@@ -447,7 +451,7 @@ exports.completeSwap = async (req, res) => {
                         [pid, pid]
                     );
                     if (cRows.length === 0) {
-                        await promisePool.execute('UPDATE swaps SET status = "completed" WHERE id = ?', [pid]);
+                        await promisePool.execute('UPDATE swaps SET status = "completed", completed_at = CURRENT_TIMESTAMP WHERE id = ?', [pid]);
                     }
                 }
             }
@@ -644,7 +648,7 @@ ORDER BY s.created_at DESC;
         const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
 
-        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
+        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.posted_time) - new Date(a.posted_time));
 
         console.log("Matched rows:", matches);
         res.status(200).json({ success: true, swaps: matches, currentUserId });
@@ -674,7 +678,7 @@ exports.getCompletedSwaps = async (req, res) => {
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
             WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'completed'
-            ORDER BY s.created_at DESC
+            ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
         const [rows] = await promisePool.execute(query, [userId, userId]);
 
