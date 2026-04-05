@@ -1762,7 +1762,8 @@
                 actionArea = `<button class="btn-accept-swap btn-disabled" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); cursor: default;">${actionText}</button>`;
             }
 
-            const editedLabel = swap.is_edited ? '<span style="font-size: 0.7rem; color: var(--accent-primary); margin-left: 0.4rem; padding: 2px 6px; background: rgba(59,130,246,0.1); border-radius: 4px; border: 1px solid rgba(59,130,246,0.2);">edited</span>' : '';
+            const showEdited = swap.is_edited && (swap.status === 'open' || swap.status === 'active');
+            const editedLabel = showEdited ? '<span style="font-size: 0.7rem; color: var(--accent-primary); margin-left: 0.4rem; padding: 2px 6px; background: rgba(59,130,246,0.1); border-radius: 4px; border: 1px solid rgba(59,130,246,0.2);">edited</span>' : '';
 
             let timeStrHTML = `<span>Posted:</span> <strong>${formatRelativeDate(swap.created_at)}</strong>`;
             if (swap.status === 'completed' || currentTab === 'completed') {
