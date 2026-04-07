@@ -127,15 +127,16 @@
             <h2>Welcome <span>Back</span></h2>
             <p>Log in to manage your campus swaps.</p>
 
-            <form action="/api/auth/login" method="POST">
+            <div id="alert" class="alert alert-error" style="display: none; margin-bottom: 1.5rem; padding: 0.8rem; border-radius: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+
+            <form id="loginForm">
                 <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email"
-                        required>
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email" required>
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <div class="password-group">
+                    <div style="position: relative;">
                         <input type="password" id="password" name="password" class="form-control"
                             placeholder="Enter your password" required>
                         <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('password', this)" title="Toggle Password Visibility">
@@ -143,7 +144,7 @@
                         </button>
                     </div>
                 </div>
-                <button type="submit" class="btn-submit">Log In</button>
+                <button type="submit" class="btn-submit" id="submitBtn">Log In</button>
             </form>
 
             <div class="auth-links">
@@ -154,6 +155,53 @@
         </div>
     </main>
     <script src="/js/main.js"></script>
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const alertBox = document.getElementById('alert');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            // Loading state
+            submitBtn.innerText = 'Verifying...';
+            submitBtn.disabled = true;
+            alertBox.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    submitBtn.innerText = 'Success! Redirecting...';
+                    window.location.href = data.redirect || '/dashboard';
+                } else {
+                    // Handle validation errors or auth errors
+                    let errMsg = data.message || data.error || 'Invalid credentials.';
+                    if (data.errors && Array.isArray(data.errors)) {
+                        errMsg = data.errors.map(err => err.msg).join(' ');
+                    }
+                    alertBox.innerText = errMsg;
+                    alertBox.style.display = 'block';
+                    submitBtn.innerText = 'Log In';
+                    submitBtn.disabled = false;
+                }
+            } catch (error) {
+                alertBox.innerText = 'Network error. Please check your connection.';
+                alertBox.style.display = 'block';
+                submitBtn.innerText = 'Log In';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
 </body>
 
 </html>

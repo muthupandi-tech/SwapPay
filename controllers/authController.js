@@ -1,19 +1,7 @@
 const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
 const emailService = require('../utils/emailService');
-
-// Database connection using the configured details
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-const promisePool = pool.promise();
+const pool = require('../config/db');
 
 exports.registerUser = async (req, res) => {
     const { name, phone, email, college, password, confirmPassword } = req.body;
@@ -38,13 +26,16 @@ exports.registerUser = async (req, res) => {
 
         // Store user in MySQL database
         const query = 'INSERT INTO users (name, phone, email, college, password, is_verified, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?, FALSE, ?, ?)';
-        const [result] = await promisePool.execute(query, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
+        const [result] = await pool.execute(query, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
 
         // Send OTP Email
         await emailService.sendOTPEmail(email, otp);
 
-        // Redirect to OTP verification page
-        return res.redirect(`/verify-otp?email=${encodeURIComponent(email)}`);
+        return res.status(201).json({ 
+            success: true, 
+            message: 'OTP sent to your email.', 
+            redirect: `/verify-otp?email=${encodeURIComponent(email)}` 
+        });
     } catch (error) {
         console.error('Registration Error:', error);
         if (error.code === 'ER_DUP_ENTRY') {
@@ -62,7 +53,7 @@ exports.loginUser = async (req, res) => {
     }
 
     try {
-        const [rows] = await promisePool.execute('SELECT * FROM users WHERE email = ?', [email]);
+        const [rows] = await pool.execute('SELECT id, name, email, password, role, is_verified, is_blocked FROM users WHERE email = ?', [email]);
 
         if (rows.length === 0) {
             return res.status(401).send('Invalid email or password.');
@@ -89,12 +80,14 @@ exports.loginUser = async (req, res) => {
         req.session.userName = user.name;
         req.session.role = user.role; // Store role for admin checks
 
-        // Redirect user
-        if (user.role === 'admin') {
-            return res.redirect('/admin');
-        } else {
-            return res.redirect('/dashboard');
-        }
+        req.session.role = user.role;
+
+        return res.json({ 
+            success: true, 
+            message: 'Login successful!', 
+            redirect: user.role === 'admin' ? '/admin-dashboard' : '/dashboard' 
+        });
+
     } catch (error) {
         console.error('Login Error:', error);
         return res.status(500).send('An error occurred during login.');
@@ -161,7 +154,7 @@ exports.verifyOTP = async (req, res) => {
     }
 
     try {
-        const [rows] = await promisePool.execute('SELECT id, otp_code, otp_expiry, is_verified FROM users WHERE email = ?', [email]);
+        const [rows] = await pool.execute('SELECT id, otp_code, otp_expiry, is_verified FROM users WHERE email = ?', [email]);
         if (rows.length === 0) {
             return res.status(400).json({ success: false, message: 'User not found.' });
         }
@@ -181,7 +174,7 @@ exports.verifyOTP = async (req, res) => {
         }
 
         // Verify user and clear OTP
-        await promisePool.execute('UPDATE users SET is_verified = TRUE, otp_code = NULL, otp_expiry = NULL WHERE id = ?', [user.id]);
+        await pool.execute('UPDATE users SET is_verified = TRUE, otp_code = NULL, otp_expiry = NULL WHERE id = ?', [user.id]);
 
         return res.json({ success: true, message: 'Email verified successfully! You can now log in.' });
     } catch (error) {
@@ -197,7 +190,7 @@ exports.resendOTP = async (req, res) => {
     }
 
     try {
-        const [rows] = await promisePool.execute('SELECT id, is_verified FROM users WHERE email = ?', [email]);
+        const [rows] = await pool.execute('SELECT id, is_verified FROM users WHERE email = ?', [email]);
         if (rows.length === 0) {
             return res.status(400).json({ success: false, message: 'User not found.' });
         }
@@ -211,7 +204,7 @@ exports.resendOTP = async (req, res) => {
         // 5 minutes expiry
         const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-        await promisePool.execute('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE id = ?', [otp, otpExpiry, rows[0].id]);
+        await pool.execute('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE id = ?', [otp, otpExpiry, rows[0].id]);
 
         // Send OTP Email
         await emailService.sendOTPEmail(email, otp);
@@ -219,7 +212,7 @@ exports.resendOTP = async (req, res) => {
         return res.json({ success: true, message: 'A new OTP has been sent to your email.' });
     } catch (error) {
         console.error('Resend OTP Error:', error);
-        return res.status(500).json({ success: false, message: 'Server error during OTP logic.' });
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
     }
 };
 
@@ -230,7 +223,7 @@ exports.forgotPassword = async (req, res) => {
     }
 
     try {
-        const [rows] = await promisePool.execute('SELECT id FROM users WHERE email = ?', [email]);
+        const [rows] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
         if (rows.length === 0) {
             // For security, don't reveal if email exists or not
             return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
@@ -240,7 +233,7 @@ exports.forgotPassword = async (req, res) => {
         const token = crypto.randomBytes(32).toString('hex');
         const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
             [token, expiry, rows[0].id]
         );
@@ -250,7 +243,7 @@ exports.forgotPassword = async (req, res) => {
         return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
     } catch (error) {
         console.error('Forgot Password Error:', error);
-        return res.status(500).json({ success: false, message: 'Server error during forgot password process.' });
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
     }
 };
 
@@ -262,7 +255,7 @@ exports.resetPassword = async (req, res) => {
     }
 
     try {
-        const [rows] = await promisePool.execute(
+        const [rows] = await pool.execute(
             'SELECT id, reset_token_expiry FROM users WHERE reset_token = ?',
             [token]
         );
@@ -278,7 +271,7 @@ exports.resetPassword = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
             [hashedPassword, user.id]
         );
@@ -286,6 +279,6 @@ exports.resetPassword = async (req, res) => {
         return res.json({ success: true, message: 'Password has been reset successfully. You can now log in.' });
     } catch (error) {
         console.error('Reset Password Error:', error);
-        return res.status(500).json({ success: false, message: 'Server error during password reset.' });
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
     }
 };

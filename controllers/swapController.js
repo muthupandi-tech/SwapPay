@@ -1,18 +1,6 @@
 const mysql = require('mysql2');
 const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail } = require('../utils/emailService');
-
-// Database connection using the configured details
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-const promisePool = pool.promise();
+const pool = require('../config/db');
 
 // Create a new swap request
 exports.createSwap = async (req, res) => {
@@ -38,14 +26,14 @@ exports.createSwap = async (req, res) => {
         const parsedAmount = parseFloat(amount);
 
         // --- NEW: Respect User's auto_match preference and fetch location ---
-        const [userRows] = await promisePool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
+        const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
         const userLat = userRows.length > 0 ? userRows[0].latitude : null;
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
 
         // 1. Insert the PARENT swap request initially
         const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await promisePool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng]);
+        const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng]);
         const newParentSwapId = result.insertId;
 
         if (!userAutoMatch) {
@@ -88,7 +76,7 @@ exports.createSwap = async (req, res) => {
             candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = ? THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
             queryParams.push(remainingNeeded);
 
-            const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
+            const [matchRows] = await pool.execute(candidateQuery, queryParams);
 
             if (matchRows.length > 0) {
                 let perfectMatchIndex = matchRows.findIndex(r => parseFloat(r.remaining_amount) === remainingNeeded);
@@ -106,7 +94,7 @@ exports.createSwap = async (req, res) => {
                         location: r.location
                     }));
 
-                    const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+                    const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
                     if (userRows.length > 0) {
                         const { sendMultiplePartnersAvailableEmail } = require('../utils/emailService');
                         await sendMultiplePartnersAvailableEmail(userRows[0].email, parsedAmount, emailPartners);
@@ -148,7 +136,7 @@ exports.createSwap = async (req, res) => {
 
                 candidateQuery += ` ORDER BY created_at ASC LIMIT 1`;
 
-                const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
+                const [matchRows] = await pool.execute(candidateQuery, queryParams);
 
                 if (matchRows.length === 0) {
                     break; // No more suitable matches found
@@ -164,13 +152,13 @@ exports.createSwap = async (req, res) => {
                 const newCandidateRemaining = candidateRemaining - chunkAmount;
                 const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
-                await promisePool.execute(
+                await pool.execute(
                     'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
                     [newCandidateRemaining, candidateStatus, candidateStatus, candidate.id]
                 );
 
                 // Create CHILD SWAP representing the exact match chunk
-                const [childResult] = await promisePool.execute(`
+                const [childResult] = await pool.execute(`
                     INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
                 `, [
@@ -194,7 +182,7 @@ exports.createSwap = async (req, res) => {
 
             // Update Our Parent Swap based on what was matched
             const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
-            await promisePool.execute(
+            await pool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
                 [remainingNeeded, finalParentStatus, finalParentStatus, newParentSwapId]
             );
@@ -210,8 +198,8 @@ exports.createSwap = async (req, res) => {
 
                     // Notifications
                     const msg = `Match Found! ₹${chunkAmt} of your request has been matched with a partner!`;
-                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partial Match', msg, 'match']);
-                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [partnerId, 'Partial Match', msg, 'match']);
+                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partial Match', msg, 'match']);
+                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [partnerId, 'Partial Match', msg, 'match']);
 
                     if (global.io) {
                         global.io.to(`user_${userId}`).emit('notification', { title: 'Partial Match', message: msg, type: 'match', created_at: new Date() });
@@ -222,8 +210,8 @@ exports.createSwap = async (req, res) => {
                     // Emails
                     (async () => {
                         try {
-                            const [meRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-                            const [partnerRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [partnerId]);
+                            const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                            const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [partnerId]);
 
                             if (meRows.length > 0 && partnerRows.length > 0) {
                                 const me = meRows[0];
@@ -233,7 +221,7 @@ exports.createSwap = async (req, res) => {
                                 await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, type === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
 
                                 // Partner remaining needs to pull from DB, but we know it's CandidateParent's remaining
-                                const [pRow] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                                const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
                                 const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
                                 await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
                             }
@@ -254,7 +242,7 @@ exports.createSwap = async (req, res) => {
 
         // If no matches at all (or autoMatchProceed is false and no candidates found)
         try {
-            const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+            const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
             if (userRows.length > 0) {
                 const { sendSwapCreatedEmail } = require('../utils/emailService');
                 await sendSwapCreatedEmail(userRows[0].email, type, parsedAmount, location);
@@ -289,7 +277,7 @@ exports.getNearbySwaps = async (req, res) => {
             WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != ? 
             ORDER BY s.created_at DESC
         `;
-        const [rows] = await promisePool.execute(query, [userId]);
+        const [rows] = await pool.execute(query, [userId]);
 
         const enhancedRows = rows.map(swap => ({ ...swap, distanceKm: undefined }));
 
@@ -316,7 +304,7 @@ exports.completeSwap = async (req, res) => {
 
     try {
         const checkQuery = 'SELECT * FROM swaps WHERE id = ?';
-        const [rows] = await promisePool.execute(checkQuery, [swapId]);
+        const [rows] = await pool.execute(checkQuery, [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Swap request not found.' });
@@ -338,7 +326,7 @@ exports.completeSwap = async (req, res) => {
         if (swap.user_id === userId || swap.matched_user_id === userId) {
             isAuthorized = true;
         } else {
-            const [matchRows] = await promisePool.execute('SELECT * FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+            const [matchRows] = await pool.execute('SELECT * FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
             if (matchRows.length > 0) isAuthorized = true;
         }
 
@@ -365,11 +353,11 @@ exports.completeSwap = async (req, res) => {
         }
 
         if (newStatus === 'completed') {
-            await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            await pool.execute('UPDATE swaps SET completed_by = ?, status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
         } else {
-            await promisePool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            await pool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
         }
-        await promisePool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
+        await pool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
 
         if (newStatus === 'completed') {
             // Both have completed! Finalize it.
@@ -377,21 +365,21 @@ exports.completeSwap = async (req, res) => {
             // --- NEW: Trust Recovery System ---
             for (let uid of [swap.user_id, swap.matched_user_id]) {
                 if (!uid) continue;
-                const [trustRows] = await promisePool.execute('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?', [uid]);
+                const [trustRows] = await pool.execute('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?', [uid]);
                 const avgStars = parseFloat(trustRows[0].avg_stars);
                 if (!isNaN(avgStars) && avgStars < 2) {
-                    const [uRow] = await promisePool.execute('SELECT recovery_progress FROM users WHERE id = ?', [uid]);
+                    const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [uid]);
                     if (uRow.length > 0) {
                         let prog = (uRow[0].recovery_progress || 0) + 1;
                         if (prog >= 2) {
-                            await promisePool.execute('UPDATE users SET recovery_progress = 0 WHERE id = ?', [uid]);
+                            await pool.execute('UPDATE users SET recovery_progress = 0 WHERE id = ?', [uid]);
                             const msg = "✅ Your account is back to good standing! Keep completing swaps to naturally improve your Trust Score.";
-                            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [uid, 'Account Restored', msg, 'system']);
+                            await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [uid, 'Account Restored', msg, 'system']);
                             if (global.io) {
                                 global.io.to(`user_${uid}`).emit('notification', { title: 'Account Restored', message: msg, type: 'system', created_at: new Date() });
                             }
                         } else {
-                            await promisePool.execute('UPDATE users SET recovery_progress = ? WHERE id = ?', [prog, uid]);
+                            await pool.execute('UPDATE users SET recovery_progress = ? WHERE id = ?', [prog, uid]);
                         }
                     }
                 }
@@ -403,9 +391,9 @@ exports.completeSwap = async (req, res) => {
             const title = 'Swap Completed';
             const type = 'completed';
 
-            await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.user_id, title, msg, type]);
+            await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.user_id, title, msg, type]);
             if (swap.matched_user_id) {
-                await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.matched_user_id, title, msg, type]);
+                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.matched_user_id, title, msg, type]);
             }
 
             // Emit Socket Events
@@ -427,8 +415,8 @@ exports.completeSwap = async (req, res) => {
 
             // Email Notification
             try {
-                const [u1Rows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [swap.user_id]);
-                const [u2Rows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [swap.matched_user_id]);
+                const [u1Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.user_id]);
+                const [u2Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.matched_user_id]);
 
                 if (u1Rows.length > 0 && u2Rows.length > 0) {
                     const { sendSwapCompletedEmail } = require('../utils/emailService');
@@ -444,14 +432,14 @@ exports.completeSwap = async (req, res) => {
             // Propagate completion to parent swaps (Crowd-Swap containers)
             const parentIds = [swap.parent_swap_id, swap.matched_parent_swap_id].filter(id => id != null);
             for (const pid of parentIds) {
-                const [pRows] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [pid]);
+                const [pRows] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [pid]);
                 if (pRows.length > 0 && parseFloat(pRows[0].remaining_amount) === 0) {
-                    const [cRows] = await promisePool.execute(
+                    const [cRows] = await pool.execute(
                         'SELECT id FROM swaps WHERE (parent_swap_id = ? OR matched_parent_swap_id = ?) AND status != "completed"',
                         [pid, pid]
                     );
                     if (cRows.length === 0) {
-                        await promisePool.execute('UPDATE swaps SET status = "completed", completed_at = CURRENT_TIMESTAMP WHERE id = ?', [pid]);
+                        await pool.execute('UPDATE swaps SET status = "completed", completed_at = CURRENT_TIMESTAMP WHERE id = ?', [pid]);
                     }
                 }
             }
@@ -462,8 +450,8 @@ exports.completeSwap = async (req, res) => {
 
             if (partnerId) {
                 try {
-                    const [meRows] = await promisePool.execute('SELECT name FROM users WHERE id = ?', [userId]);
-                    const [partnerRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [partnerId]);
+                    const [meRows] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+                    const [partnerRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [partnerId]);
 
                     if (meRows.length > 0 && partnerRows.length > 0) {
                         const { sendPendingConfirmationEmail } = require('../utils/emailService');
@@ -498,7 +486,7 @@ exports.getDashboardStats = async (req, res) => {
             WHERE (user_id = ? OR matched_user_id = ?) 
               AND status IN ('active', 'open', 'matched', 'pending_confirmation')
         `;
-        const [activeRows] = await promisePool.execute(activeSwapsQuery, [userId, userId]);
+        const [activeRows] = await pool.execute(activeSwapsQuery, [userId, userId]);
         const activeSwaps = activeRows[0].count;
 
         // Total Exchanged: sum of amounts where status completed
@@ -508,7 +496,7 @@ exports.getDashboardStats = async (req, res) => {
             WHERE (user_id = ? OR matched_user_id = ?) 
               AND status = 'completed'
         `;
-        const [exchangedRows] = await promisePool.execute(exchangedQuery, [userId, userId]);
+        const [exchangedRows] = await pool.execute(exchangedQuery, [userId, userId]);
         const totalExchanged = parseFloat(exchangedRows[0].total) || 0;
 
         // Trust Score: Based on ratings
@@ -517,7 +505,7 @@ exports.getDashboardStats = async (req, res) => {
             FROM ratings 
             WHERE rated_user_id = ?
         `;
-        const [trustRows] = await promisePool.execute(trustQuery, [userId]);
+        const [trustRows] = await pool.execute(trustQuery, [userId]);
         const avgStars = parseFloat(trustRows[0].avg_stars);
 
         let trustScoreNum = 100;
@@ -533,7 +521,7 @@ exports.getDashboardStats = async (req, res) => {
         const role = req.session.role || 'user';
 
         // Recovery progress
-        const [uRow] = await promisePool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
+        const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
         const recoveryProgress = uRow.length > 0 ? uRow[0].recovery_progress : 0;
 
         res.status(200).json({ activeSwaps, totalExchanged, trustScore, role, avgStars, recoveryProgress });
@@ -552,7 +540,7 @@ exports.getActiveSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.*,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -562,7 +550,7 @@ exports.getActiveSwaps = async (req, res) => {
             WHERE s.user_id = ? AND (s.status = 'active' OR s.status = 'open')
             ORDER BY s.created_at DESC
         `;
-        const [parentRows] = await promisePool.execute(query, [userId]);
+        const [parentRows] = await pool.execute(query, [userId]);
         
         let allRows = [...parentRows];
 
@@ -570,7 +558,7 @@ exports.getActiveSwaps = async (req, res) => {
             const parentIds = parentRows.map(r => r.id);
             const placeholders = parentIds.map(() => '?').join(',');
             const childQuery = `
-                SELECT s.*,
+                SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
                 u1.name as creator_name, u2.name as matched_name,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -579,7 +567,7 @@ exports.getActiveSwaps = async (req, res) => {
                 LEFT JOIN users u2 ON s.matched_user_id = u2.id
                 WHERE (s.parent_swap_id IN (${placeholders}) OR s.matched_parent_swap_id IN (${placeholders}))
             `;
-            const [childRows] = await promisePool.execute(childQuery, [...parentIds, ...parentIds]);
+            const [childRows] = await pool.execute(childQuery, [...parentIds, ...parentIds]);
             
             // Avoid duplicate rows if a query returns overlapping data
             const existingIds = new Set(allRows.map(r => r.id));
@@ -644,7 +632,7 @@ WHERE
 ORDER BY m.created_at DESC;
         `;
         
-        const [rows1] = await promisePool.execute(query1, [currentUserId, currentUserId, currentUserId]);
+        const [rows1] = await pool.execute(query1, [currentUserId, currentUserId, currentUserId]);
 
         const query2 = `
 SELECT 
@@ -669,7 +657,7 @@ WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confi
 AND (s.user_id = ? OR s.matched_user_id = ?)
 ORDER BY s.created_at DESC;
         `;
-        const [rows2] = await promisePool.execute(query2, [currentUserId, currentUserId, currentUserId]);
+        const [rows2] = await pool.execute(query2, [currentUserId, currentUserId, currentUserId]);
 
         const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
@@ -696,7 +684,7 @@ exports.getCompletedSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.*,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -706,7 +694,7 @@ exports.getCompletedSwaps = async (req, res) => {
             WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'completed'
             ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
-        const [rows] = await promisePool.execute(query, [userId, userId]);
+        const [rows] = await pool.execute(query, [userId, userId]);
 
         const swapsWithContext = rows.map(swap => {
             return {
@@ -741,7 +729,7 @@ exports.rateSwap = async (req, res) => {
 
     try {
         const checkQuery = 'SELECT status, user_id, matched_user_id FROM swaps WHERE id = ?';
-        const [rows] = await promisePool.execute(checkQuery, [swapId]);
+        const [rows] = await pool.execute(checkQuery, [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Swap request not found.' });
@@ -763,7 +751,7 @@ exports.rateSwap = async (req, res) => {
         }
 
         if (!isAuthorized || !ratedUserId) {
-            const [matchRows] = await promisePool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
             if (matchRows.length > 0) {
                 const match = matchRows[0];
                 if (match.requester_id === userId || match.accepter_id === userId) {
@@ -783,20 +771,20 @@ exports.rateSwap = async (req, res) => {
 
         // Check if user already rated this swap
         const ratingCheckQuery = 'SELECT id FROM ratings WHERE swap_id = ? AND rater_user_id = ?';
-        const [ratingRows] = await promisePool.execute(ratingCheckQuery, [swapId, userId]);
+        const [ratingRows] = await pool.execute(ratingCheckQuery, [swapId, userId]);
 
         if (ratingRows.length > 0) {
             return res.status(400).json({ error: 'You have already rated this swap.' });
         }
 
         const insertQuery = 'INSERT INTO ratings (swap_id, rater_user_id, rated_user_id, stars) VALUES (?, ?, ?, ?)';
-        await promisePool.execute(insertQuery, [swapId, userId, ratedUserId, stars]);
+        await pool.execute(insertQuery, [swapId, userId, ratedUserId, stars]);
 
         // Notify Rated User
         const msg = `You received a ${stars}-star rating from your recent swap partner.`;
         const title = 'New Rating';
         const type = 'rating';
-        await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, title, msg, type]);
+        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, title, msg, type]);
 
         // Emit Socket Event
         if (global.io) {
@@ -807,11 +795,11 @@ exports.rateSwap = async (req, res) => {
 
         // Email Notification
         try {
-            const [userRows] = await promisePool.execute('SELECT email FROM users WHERE id = ?', [ratedUserId]);
+            const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [ratedUserId]);
             if (userRows.length > 0) {
                 // Calculate new trust score
                 const trustQuery = `SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?`;
-                const [trustRows] = await promisePool.execute(trustQuery, [ratedUserId]);
+                const [trustRows] = await pool.execute(trustQuery, [ratedUserId]);
                 let avgStars = parseFloat(trustRows[0].avg_stars);
                 let newTrustScore = 100;
                 if (!isNaN(avgStars)) {
@@ -825,7 +813,7 @@ exports.rateSwap = async (req, res) => {
                     const warningTitle = 'Trust Score Warning';
                     
                     // 1. Save Notification
-                    await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, warningTitle, warningMsg, 'warning']);
+                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, warningTitle, warningMsg, 'warning']);
                     
                     // 2. Socket Alert
                     if (global.io) {
@@ -859,7 +847,7 @@ exports.getNotifications = async (req, res) => {
 
     try {
         const query = 'SELECT id, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50';
-        const [rows] = await promisePool.execute(query, [userId]);
+        const [rows] = await pool.execute(query, [userId]);
         res.status(200).json(rows);
     } catch (error) {
         console.error('Error fetching notifications:', error);
@@ -875,7 +863,7 @@ exports.markNotificationRead = async (req, res) => {
 
     try {
         const query = 'UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ?';
-        await promisePool.execute(query, [notifId, userId]);
+        await pool.execute(query, [notifId, userId]);
         res.status(200).json({ message: 'Notification marked as read.' });
     } catch (error) {
         console.error('Error marking notification read:', error);
@@ -919,7 +907,7 @@ exports.getPartners = async (req, res) => {
         `;
         let queryParams = [oppositeType, userId];
 
-        const [matchRows] = await promisePool.execute(candidateQuery, queryParams);
+        const [matchRows] = await pool.execute(candidateQuery, queryParams);
 
         const validPartners = matchRows.map(r => ({
             id: r.id,
@@ -947,7 +935,7 @@ exports.confirmPartnerSelection = async (req, res) => {
     }
 
     try {
-        const [swapRows] = await promisePool.execute('SELECT type, remaining_amount, location, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
+        const [swapRows] = await pool.execute('SELECT type, remaining_amount, location, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
         if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
 
         const mySwap = swapRows[0];
@@ -964,7 +952,7 @@ exports.confirmPartnerSelection = async (req, res) => {
 
             if (remainingNeeded <= 0) break; // Safety net
 
-            const [pRows] = await promisePool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "active"', [candidateId]);
+            const [pRows] = await pool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "active"', [candidateId]);
             if (pRows.length === 0) continue; // Partner was taken
 
             const candidateSwap = pRows[0];
@@ -976,12 +964,12 @@ exports.confirmPartnerSelection = async (req, res) => {
             const newCandidateRemaining = candidateRemaining - actualChunk;
             const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
-            await promisePool.execute(
+            await pool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time), is_selected = TRUE, selection_group_id = ?, partner_priority_rank = ? WHERE id = ?',
                 [newCandidateRemaining, candidateStatus, candidateStatus, selectionGroupId, i + 1, candidateId]
             );
 
-            const [childResult] = await promisePool.execute(`
+            const [childResult] = await pool.execute(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
             `, [
@@ -1000,7 +988,7 @@ exports.confirmPartnerSelection = async (req, res) => {
         }
 
         const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
             [remainingNeeded, finalParentStatus, finalParentStatus, swapId]
         );
@@ -1012,8 +1000,8 @@ exports.confirmPartnerSelection = async (req, res) => {
                 const chunkAmt = chunk.chunkAmount;
 
                 const msg = `Match Confirmed! ₹${chunkAmt} of a swap request has been locked with you!`;
-                await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partner Selected', msg, 'match']);
-                await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [pId, 'Partner Selected', msg, 'match']);
+                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partner Selected', msg, 'match']);
+                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [pId, 'Partner Selected', msg, 'match']);
 
                 if (global.io) {
                     global.io.to(`user_${userId}`).emit('notification', { title: 'Partner Selected', message: msg, type: 'match', created_at: new Date() });
@@ -1022,8 +1010,8 @@ exports.confirmPartnerSelection = async (req, res) => {
 
                 (async () => {
                     try {
-                        const [meRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-                        const [partnerRows] = await promisePool.execute('SELECT email, name FROM users WHERE id = ?', [pId]);
+                        const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                        const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [pId]);
 
                         if (meRows.length > 0 && partnerRows.length > 0) {
                             const me = meRows[0];
@@ -1032,7 +1020,7 @@ exports.confirmPartnerSelection = async (req, res) => {
 
                             await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, mySwap.type === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
 
-                            const [pRow] = await promisePool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                            const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
                             const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
                             await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
                         }
@@ -1045,7 +1033,7 @@ exports.confirmPartnerSelection = async (req, res) => {
 
         // Reset notification state for the requester (current user)
         console.log("Resetting notification state for user after partner selection:", userId);
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
             [userId]
         );
@@ -1071,14 +1059,14 @@ exports.getSwapFeed = async (req, res) => {
 
     try {
         // 1. Fetch user's auto_match preference and location details
-        const [userRows] = await promisePool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
+        const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
         const userLat = userRows.length > 0 ? userRows[0].latitude : null;
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
         const userRadius = userRows.length > 0 ? (userRows[0].search_radius || 300) : 300;
 
         // 2. Fetch user's active swaps to identify potential "Best Matches"
-        const [myActiveSwaps] = await promisePool.execute(
+        const [myActiveSwaps] = await pool.execute(
             'SELECT amount, type FROM swaps WHERE user_id = ? AND (status = "active" OR status = "open")',
             [userId]
         );
@@ -1123,11 +1111,11 @@ exports.getSwapFeed = async (req, res) => {
             query += " AND s.type = 'need_cash'";
         }
 
-        const [rows] = await promisePool.execute(query, queryParams);
+        const [rows] = await pool.execute(query, queryParams);
 
         // Fetch userAmount for sorting
         let userAmount = 0;
-        const [lastReqRows] = await promisePool.execute(
+        const [lastReqRows] = await pool.execute(
             'SELECT amount FROM swaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
             [userId]
         );
@@ -1260,7 +1248,7 @@ exports.acceptSwap = async (req, res) => {
             return res.status(401).json({ error: "User not authenticated" });
         }
 
-        const [swapRows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
         
         const swap = swapRows.length > 0 ? swapRows[0] : null;
 
@@ -1288,7 +1276,7 @@ exports.acceptSwap = async (req, res) => {
 
         console.log("Inserting match...");
 
-        await promisePool.execute(`
+        await pool.execute(`
           INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
           VALUES (?, ?, ?, ?, NOW())
         `, [
@@ -1299,7 +1287,7 @@ exports.acceptSwap = async (req, res) => {
         ]);
 
         console.log("Updating requester's swap...");
-        await promisePool.execute(`
+        await pool.execute(`
           UPDATE swaps
           SET status = 'matched',
               matched_user_id = ?
@@ -1311,7 +1299,7 @@ exports.acceptSwap = async (req, res) => {
         const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
         
         // Find the BEST matching active swap for the current user
-        const [myMatchRows] = await promisePool.execute(`
+        const [myMatchRows] = await pool.execute(`
             SELECT id FROM swaps 
             WHERE user_id = ? 
               AND (status = 'active' OR status = 'open') 
@@ -1324,7 +1312,7 @@ exports.acceptSwap = async (req, res) => {
         if (myMatchRows.length > 0) {
             const mySwapId = myMatchRows[0].id;
             console.log(`Matching accepter's swap ${mySwapId} with requester's swap ${swapId}`);
-            await promisePool.execute(`
+            await pool.execute(`
                 UPDATE swaps 
                 SET status = 'matched', 
                     matched_user_id = ? 
@@ -1333,15 +1321,15 @@ exports.acceptSwap = async (req, res) => {
         }
 
         console.log("Resetting notification state for user:", currentUserId);
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
             [currentUserId]
         );
 
         // --- NEW: Send Email Notifications to both parties ---
         try {
-            const [requesterRows] = await promisePool.execute('SELECT name, email FROM users WHERE id = ?', [swap.user_id]);
-            const [accepterRows] = await promisePool.execute('SELECT name, email FROM users WHERE id = ?', [currentUserId]);
+            const [requesterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [swap.user_id]);
+            const [accepterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [currentUserId]);
 
             if (requesterRows.length > 0 && accepterRows.length > 0) {
                 const requester = requesterRows[0];
@@ -1400,7 +1388,7 @@ exports.deleteSwap = async (req, res) => {
 
     try {
         // 1. Find the swap
-        const [rows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Swap request not found.' });
@@ -1422,7 +1410,7 @@ exports.deleteSwap = async (req, res) => {
         }
 
         // 4. Perform deletion
-        await promisePool.execute('DELETE FROM swaps WHERE id = ?', [swapId]);
+        await pool.execute('DELETE FROM swaps WHERE id = ?', [swapId]);
 
         res.json({ success: true, message: 'Swap deleted successfully.' });
 
@@ -1451,7 +1439,7 @@ exports.updateSwap = async (req, res) => {
 
     try {
         // 1. Find the swap
-        const [rows] = await promisePool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Swap request not found.' });
@@ -1484,7 +1472,7 @@ exports.updateSwap = async (req, res) => {
         // We update type, amount, total_amount, remaining_amount
         // created_at is updated to NOW() to "update the posted time"
         // is_edited is set to TRUE for the frontend label
-        await promisePool.execute(`
+        await pool.execute(`
             UPDATE swaps 
             SET type = ?, amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
             WHERE id = ?

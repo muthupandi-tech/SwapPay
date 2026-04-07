@@ -8,6 +8,20 @@ const http = require('http'); // Add HTTP module
 const { Server } = require('socket.io'); // Add Socket.IO
 
 const app = express();
+const helmet = require('helmet');
+const cors = require('cors');
+
+// Basic Security Headers
+app.use(helmet({
+    contentSecurityPolicy: false, // Disabled for simpler development, enable in full production
+}));
+
+// CORS Configuration
+app.use(cors({
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+    credentials: true
+}));
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -124,11 +138,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // Configure express-session
 app.use(session({
-    secret: 'swappay_secret_key_123',
+    secret: process.env.SESSION_SECRET || 'swappay_fallback_secret',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
         maxAge: 1000 * 60 * 60 * 24 // 1 day session
     }
 }));

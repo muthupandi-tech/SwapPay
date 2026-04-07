@@ -1,11 +1,4 @@
-const mysql = require('mysql2/promise');
-
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay'
-});
+const pool = require('../config/db');
 
 exports.getNotifications = async (req, res) => {
     try {

@@ -1,18 +1,6 @@
 const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
-
-// Database connection using the configured details
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-const promisePool = pool.promise();
+const pool = require('../config/db');
 
 exports.getProfile = async (req, res) => {
     try {
@@ -23,7 +11,7 @@ exports.getProfile = async (req, res) => {
         }
 
         // Fetch User details
-        const [userRows] = await promisePool.execute(
+        const [userRows] = await pool.execute(
             'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, recovery_progress, created_at FROM users WHERE id = ?',
             [userId]
         );
@@ -35,7 +23,7 @@ exports.getProfile = async (req, res) => {
         const user = userRows[0];
 
         // Total Swaps Completed
-        const [swapRows] = await promisePool.execute(
+        const [swapRows] = await pool.execute(
             `SELECT COUNT(*) as completed_count 
              FROM swaps 
              WHERE status = 'completed' AND (user_id = ? OR matched_user_id = ?)`,
@@ -44,7 +32,7 @@ exports.getProfile = async (req, res) => {
         const totalSwapsCompleted = swapRows[0].completed_count;
 
         // Trust Score & Ratings
-        const [ratingRows] = await promisePool.execute(
+        const [ratingRows] = await pool.execute(
             `SELECT r.stars, r.created_at, u.name as rater_name 
              FROM ratings r
              JOIN users u ON r.rater_user_id = u.id
@@ -99,7 +87,7 @@ exports.updateProfile = async (req, res) => {
             return res.status(400).json({ error: 'Name, phone, and college are required.' });
         }
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET name = ?, phone = ?, college = ? WHERE id = ?',
             [name, phone, college, userId]
         );
@@ -126,7 +114,7 @@ exports.updateLocation = async (req, res) => {
             return res.status(400).json({ error: 'Latitude and Longitude are required.' });
         }
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET lat = ?, lng = ?, campus_name = "Auto-Verified Campus" WHERE id = ?',
             [lat, lng, userId]
         );
@@ -152,7 +140,7 @@ exports.postLocation = async (req, res) => {
             return res.status(400).json({ error: 'latitude and longitude are required.' });
         }
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET latitude = ?, longitude = ? WHERE id = ?',
             [latitude, longitude, userId]
         );
@@ -177,7 +165,7 @@ exports.updateAutoMatch = async (req, res) => {
             return res.status(400).json({ error: 'autoMatch value is required.' });
         }
 
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET auto_match = ? WHERE id = ?',
             [autoMatch ? 1 : 0, userId]
         );
@@ -193,7 +181,7 @@ exports.updateAutoMatch = async (req, res) => {
 exports.getSettings = async (req, res) => {
     try {
         const userId = req.session.userId;
-        const [rows] = await promisePool.execute(
+        const [rows] = await pool.execute(
             'SELECT auto_match, notification_sound, notification_vibration, notification_animation, search_radius FROM users WHERE id = ?',
             [userId]
         );
@@ -226,7 +214,7 @@ exports.updateSettings = async (req, res) => {
             return res.status(400).json({ error: 'All settings values are required.' });
         }
         
-        await promisePool.execute(
+        await pool.execute(
             'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ?, search_radius = ? WHERE id = ?',
             [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, search_radius || 300, userId]
         );
@@ -252,7 +240,7 @@ exports.changePassword = async (req, res) => {
         }
 
         // Fetch current password
-        const [rows] = await promisePool.execute('SELECT password FROM users WHERE id = ?', [userId]);
+        const [rows] = await pool.execute('SELECT password FROM users WHERE id = ?', [userId]);
         if (rows.length === 0) {
             return res.status(404).json({ error: 'User not found.' });
         }
@@ -265,7 +253,7 @@ exports.changePassword = async (req, res) => {
         }
 
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        await promisePool.execute('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        await pool.execute('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
 
         res.json({ success: true, message: 'Password updated successfully ✅' });
 

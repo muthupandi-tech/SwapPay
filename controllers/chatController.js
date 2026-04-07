@@ -1,11 +1,4 @@
-const mysql = require('mysql2/promise');
-
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay',
-});
+const pool = require('../config/db');
 
 const chatController = {
     /**
@@ -22,7 +15,7 @@ const chatController = {
             // 1. Verify existence & Auth across both schemas
             let isAuthorized = false;
 
-            const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+            const [swapRows] = await pool.execute('SELECT id, user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
             
             if (swapRows.length > 0) {
                 const swap = swapRows[0];

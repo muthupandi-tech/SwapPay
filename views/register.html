@@ -127,7 +127,9 @@
             <h2>Join <span>SwapPay</span></h2>
             <p>Create an account to start swapping safely on campus.</p>
 
-            <form action="/api/auth/register" method="POST" id="registerForm">
+            <div id="alert" class="alert alert-error" style="display: none; margin-bottom: 1.5rem; padding: 0.8rem; border-radius: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); text-align: left;"></div>
+
+            <form id="registerForm">
                 <div class="form-group">
                     <label for="name">Full Name</label>
                     <input type="text" id="name" name="name" class="form-control" placeholder="e.g. Alex M." required>
@@ -167,7 +169,7 @@
                         </button>
                     </div>
                 </div>
-                <button type="submit" class="btn-submit">Create Account</button>
+                <button type="submit" class="btn-submit" id="submitBtn">Create Account</button>
             </form>
             <div class="auth-links">
                 Already have an account? <a href="/login">Log In</a>
@@ -177,13 +179,58 @@
 
     <script src="/js/main.js"></script>
     <script>
-        document.getElementById('registerForm').addEventListener('submit', function (e) {
+        const registerForm = document.getElementById('registerForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const alertBox = document.getElementById('alert');
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const email = document.getElementById('email').value;
+            const college = document.getElementById('college').value;
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
 
             if (password !== confirmPassword) {
-                e.preventDefault();
-                alert('Passwords do not match. Please try again.');
+                alertBox.innerText = 'Passwords do not match.';
+                alertBox.style.display = 'block';
+                return;
+            }
+
+            // Show loading state
+            submitBtn.innerText = 'Creating Account...';
+            submitBtn.disabled = true;
+            alertBox.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, email, college, password, confirmPassword })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    submitBtn.innerText = 'Success! Redirecting...';
+                    window.location.href = data.redirect;
+                } else {
+                    let errMsg = data.message || data.error || 'Registration failed.';
+                    if (data.errors && Array.isArray(data.errors)) {
+                        errMsg = data.errors.map(err => err.msg).join(' ');
+                    }
+                    alertBox.innerText = errMsg;
+                    alertBox.style.display = 'block';
+                    submitBtn.innerText = 'Create Account';
+                    submitBtn.disabled = false;
+                }
+            } catch (error) {
+                alertBox.innerText = 'Network error. Please check your connection.';
+                alertBox.style.display = 'block';
+                submitBtn.innerText = 'Create Account';
+                submitBtn.disabled = false;
             }
         });
     </script>

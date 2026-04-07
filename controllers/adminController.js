@@ -1,25 +1,14 @@
 const mysql = require('mysql2');
 const { generateReportPDF } = require('../utils/reportGenerator');
-
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysqlpandi',
-    database: 'swappay',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-const promisePool = pool.promise();
+const pool = require('../config/db');
 
 exports.getStats = async (req, res) => {
     try {
-        const [userRows] = await promisePool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-        const [swapRows] = await promisePool.execute("SELECT COUNT(*) as count FROM swaps");
-        const [compRows] = await promisePool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
-        const [amtRows] = await promisePool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
-        const [ratingRows] = await promisePool.execute("SELECT AVG(stars) as avg FROM ratings");
+        const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
+        const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
 
         res.json({
             usersCount: userRows[0].count,
@@ -55,13 +44,14 @@ exports.generateReport = async (req, res) => {
 exports.getAllSwaps = async (req, res) => {
     try {
         const query = `
-            SELECT s.*, u1.name as creator_name, u2.name as matched_name 
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
+            u1.name as creator_name, u2.name as matched_name 
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            ORDER BY s.created_at DESC
+            ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
-        const [rows] = await promisePool.execute(query);
+        const [rows] = await pool.execute(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin swaps:', error);
@@ -72,7 +62,7 @@ exports.getAllSwaps = async (req, res) => {
 exports.deleteSwap = async (req, res) => {
     try {
         const { id } = req.params;
-        await promisePool.execute('DELETE FROM swaps WHERE id = ?', [id]);
+        await pool.execute('DELETE FROM swaps WHERE id = ?', [id]);
         res.json({ message: 'Swap deleted successfully' });
     } catch (error) {
         console.error('Error deleting swap:', error);
@@ -90,7 +80,7 @@ exports.getAllUsers = async (req, res) => {
             WHERE u.role = 'user'
             ORDER BY u.created_at DESC
         `;
-        const [rows] = await promisePool.execute(query);
+        const [rows] = await pool.execute(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin users:', error);
@@ -101,17 +91,17 @@ exports.getAllUsers = async (req, res) => {
 exports.blockUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const [user] = await promisePool.execute('SELECT is_blocked FROM users WHERE id = ?', [id]);
+        const [user] = await pool.execute('SELECT is_blocked FROM users WHERE id = ?', [id]);
         if (user.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const newStatus = !user[0].is_blocked;
-        await promisePool.execute('UPDATE users SET is_blocked = ? WHERE id = ?', [newStatus, id]);
+        await pool.execute('UPDATE users SET is_blocked = ? WHERE id = ?', [newStatus, id]);
 
         const title = 'Account Status Update';
         const type = 'admin';
         const msg = newStatus ? 'Your account has been temporarily blocked by an Admin.' : 'Your account has been unblocked by an Admin.';
 
-        await promisePool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [id, title, msg, type]);
+        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [id, title, msg, type]);
 
         if (global.io) {
             global.io.to(`user_${id}`).emit('notification', {
@@ -127,7 +117,7 @@ exports.blockUser = async (req, res) => {
 
 exports.getSettings = async (req, res) => {
     try {
-        const [rows] = await promisePool.execute("SELECT setting_key, setting_value FROM settings");
+        const [rows] = await pool.execute("SELECT setting_key, setting_value FROM settings");
         const settings = {};
         rows.forEach(row => {
             settings[row.setting_key] = row.setting_value;
@@ -146,7 +136,7 @@ exports.updateSettings = async (req, res) => {
             return res.status(400).json({ error: 'Setting key and value are required.' });
         }
 
-        await promisePool.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [key, value, value]);
+        await pool.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [key, value, value]);
         res.json({ message: 'Settings updated successfully' });
     } catch (error) {
         console.error('Error updating settings:', error);
@@ -164,7 +154,7 @@ exports.getAllFeedbacks = async (req, res) => {
             JOIN users u ON f.user_id = u.id
             ORDER BY f.created_at DESC
         `;
-        const [rows] = await promisePool.execute(query);
+        const [rows] = await pool.execute(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin feedbacks:', error);
@@ -179,7 +169,7 @@ exports.updateFeedbackStatus = async (req, res) => {
         
         if (!status) return res.status(400).json({ error: 'Status is required' });
 
-        await promisePool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
+        await pool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
         res.json({ message: `Feedback marked as ${status}` });
     } catch (error) {
         console.error('Error updating feedback status:', error);
@@ -190,7 +180,7 @@ exports.updateFeedbackStatus = async (req, res) => {
 exports.deleteFeedback = async (req, res) => {
     try {
         const { id } = req.params;
-        await promisePool.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
+        await pool.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
         res.json({ message: 'Feedback deleted successfully' });
     } catch (error) {
         console.error('Error deleting feedback:', error);
