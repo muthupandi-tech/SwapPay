@@ -58,10 +58,10 @@ window.togglePasswordVisibility = function(inputId, btn) {
     }
     
     // Add a quick feedback animation
-    btn.style.transform = 'scale(0.8)';
+    btn.style.transform = 'translateY(-50%) scale(0.8)';
     setTimeout(() => {
-        btn.style.transform = 'scale(1.1)';
-        setTimeout(() => btn.style.transform = '', 100);
+        btn.style.transform = 'translateY(-50%) scale(1.1)';
+        setTimeout(() => btn.style.transform = 'translateY(-50%)', 100);
     }, 100);
 };
 

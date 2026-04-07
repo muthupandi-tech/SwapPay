@@ -6,6 +6,7 @@
     <title>SwapPay | Support & Feedback</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/guide.css">
     <style>
         .support-container {
             padding: 3rem 5%;
@@ -87,7 +88,19 @@
             background: rgba(255, 255, 255, 0.1);
         }
 
-        select.form-control { appearance: none; }
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.2em;
+            padding-right: 2.5rem;
+        }
+
+        select.form-control option {
+            background-color: #1a1c23;
+            color: var(--text-primary);
+        }
 
         .rating-stars {
             display: flex;
@@ -332,5 +345,6 @@
             window.location.reload();
         }
     </script>
+    <script src="/js/guide.js"></script>
 </body>
 </html>

@@ -685,6 +685,8 @@ h1, h2, h3, h4, .logo {
 .toggle-password-btn {
     position: absolute;
     right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -693,17 +695,31 @@ h1, h2, h3, h4, .logo {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, transform 0.2s ease;
     user-select: none;
     padding: 0;
     z-index: 10;
+    height: 100%; /* Ensure it's centered relative to the whole height */
 }
 
 .toggle-password-btn:hover {
     color: var(--accent-secondary);
-    transform: scale(1.1);
+    transform: translateY(-50%) scale(1.1);
 }
 
 .toggle-password-btn:active {
-    transform: scale(0.9);
+    transform: translateY(-50%) scale(0.9);
 }
+
+/* Password Strength Indicator */
+.password-strength {
+    font-size: 0.85rem;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    min-height: 1.2rem;
+}
+
+.strength-weak { color: #ef4444; font-weight: 700; }
+.strength-medium { color: #f59e0b; font-weight: 700; }
+.strength-strong { color: #10b981; font-weight: 700; }
