@@ -25,16 +25,81 @@ exports.getStats = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
     try {
-        // As requested: "For now, use sample statistics. Later we will replace them with real database queries."
-        const sampleStats = {
-            usersCount: 154,
-            totalSwaps: 89,
-            completedSwaps: 42,
-            totalExchanged: 25400,
-            avgRating: 4.8
+        // 1. Overall Statistics
+        const [totalUserRows] = await pool.execute("SELECT COUNT(*) as count FROM users");
+        const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
+        const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
+
+        // 2. Comprehensive 14-Day Activity Pulse
+        const dailyQuery = `
+            SELECT 
+                d.report_date,
+                COALESCE(u.new_users, 0) as new_users,
+                COALESCE(s.pending_count, 0) as pending_count,
+                COALESCE(s.completed_count, 0) as completed_count,
+                COALESCE(s.total_amount, 0) as total_amount,
+                COALESCE(r.avg_rating, 0) as avg_rating
+            FROM (
+                SELECT CURDATE() - INTERVAL (n.n) DAY AS report_date
+                FROM (
+                    SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
+                    UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 
+                    UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12 UNION ALL SELECT 13
+                ) n
+            ) d
+            LEFT JOIN (
+                SELECT DATE(created_at) as date, COUNT(*) as new_users FROM users WHERE role = 'user' GROUP BY DATE(created_at)
+            ) u ON d.report_date = u.date
+            LEFT JOIN (
+                SELECT 
+                    DATE(created_at) as date, 
+                    SUM(CASE WHEN status IN ('open', 'matched') THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                    SUM(amount) as total_amount
+                FROM swaps 
+                GROUP BY DATE(created_at)
+            ) s ON d.report_date = s.date
+            LEFT JOIN (
+                SELECT DATE(created_at) as date, AVG(stars) as avg_rating FROM ratings GROUP BY DATE(created_at)
+            ) r ON d.report_date = r.date
+            ORDER BY d.report_date DESC
+        `;
+        const [dailyRows] = await pool.execute(dailyQuery);
+
+        // 3. Feedback Status Summary
+        const feedbackSummaryQuery = `
+            SELECT status, COUNT(*) as count 
+            FROM feedbacks 
+            GROUP BY status
+        `;
+        const [feedbackSummaryRows] = await pool.execute(feedbackSummaryQuery);
+
+        // 4. Detailed Recent Issues (Latest 10)
+        const feedbackDetailQuery = `
+            SELECT f.message, f.status, f.type, u.name as user_name, f.created_at
+            FROM feedbacks f 
+            JOIN users u ON f.user_id = u.id 
+            ORDER BY f.created_at DESC 
+            LIMIT 10
+        `;
+        const [feedbackDetailRows] = await pool.execute(feedbackDetailQuery);
+
+        const stats = {
+            totalUsersCount: totalUserRows[0].count,
+            usersCount: userRows[0].count,
+            totalSwaps: swapRows[0].count,
+            completedSwaps: compRows[0].count,
+            totalExchanged: parseFloat(amtRows[0].total) || 0,
+            avgRating: parseFloat(ratingRows[0].avg) || 0,
+            dailyActivity: dailyRows,
+            feedbackSummary: feedbackSummaryRows,
+            feedbackDetails: feedbackDetailRows
         };
 
-        generateReportPDF(sampleStats, res);
+        generateReportPDF(stats, res);
     } catch (error) {
         console.error('Error generating report:', error);
         res.status(500).json({ error: 'Failed to generate report.' });
@@ -49,7 +114,7 @@ exports.getAllSwaps = async (req, res) => {
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            ORDER BY COALESCE(s.completed_at, s.created_at) DESC
+            ORDER BY s.created_at DESC
         `;
         const [rows] = await pool.execute(query);
         res.json(rows);

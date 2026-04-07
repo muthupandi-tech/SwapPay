@@ -235,10 +235,11 @@
 
         th {
             color: var(--text-secondary);
-            font-weight: 600;
+            font-weight: 500;
             text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 1px;
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            padding-bottom: 1.5rem;
         }
 
         tbody tr:hover {
@@ -349,25 +350,115 @@
 
         /* Status Badges */
         .badge {
-            padding: 0.3rem 0.6rem;
+            padding: 0.25rem 0.75rem;
             border-radius: 50px;
-            font-size: 0.8rem;
-            font-weight: 600;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            display: inline-block;
         }
 
         .badge-open {
-            background: rgba(59, 130, 246, 0.1);
-            color: var(--accent-primary);
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.2);
         }
 
         .badge-matched {
-            background: rgba(245, 158, 11, 0.1);
-            color: #f59e0b;
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.2);
         }
 
         .badge-completed {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-success);
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .amount-cyan {
+            color: #00cec9;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.2);
+        }
+
+        /* Search & Filter Bar Styles */
+        .search-filter-bar {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            padding: 0.8rem 1.5rem;
+            color: white;
+            font-size: 0.9rem;
+            transition: 0.3s;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .tag-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+            padding: 0.5rem 1.2rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tag-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .tag-btn.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+            color: white;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .table-scroll-container {
+            max-height: 550px; /* Approx 10 rows */
+            overflow-y: auto;
+            border-radius: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+        }
+
+        .table-scroll-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .table-scroll-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -428,7 +519,20 @@
             <div class="section-header">
                 <h2>User Management</h2>
             </div>
-            <div style="overflow-x: auto;">
+
+            <!-- Search & Filter Bar -->
+            <div class="search-filter-bar">
+                <div class="search-box">
+                    <input type="text" id="userSearch" placeholder="Search users (Name, Email, ID)..." oninput="filterUsers()">
+                </div>
+                <div class="filter-group">
+                    <button class="tag-btn active" onclick="setUserPeriod('all', this)">All</button>
+                    <button class="tag-btn" onclick="setUserPeriod('today', this)">Today</button>
+                    <button class="tag-btn" onclick="setUserPeriod('week', this)">This Week</button>
+                </div>
+            </div>
+
+            <div class="table-scroll-container">
                 <table>
                     <thead>
                         <tr>
@@ -484,7 +588,20 @@
             <div class="section-header">
                 <h2>Swap History</h2>
             </div>
-            <div style="overflow-x: auto;">
+
+            <!-- Search & Filter Bar -->
+            <div class="search-filter-bar">
+                <div class="search-box">
+                    <input type="text" id="swapSearch" placeholder="Search swaps (Amount, User, Type)..." oninput="filterSwaps()">
+                </div>
+                <div class="filter-group">
+                    <button class="tag-btn active" onclick="setSwapPeriod('all', this)">All</button>
+                    <button class="tag-btn" onclick="setSwapPeriod('today', this)">Today</button>
+                    <button class="tag-btn" onclick="setSwapPeriod('week', this)">This Week</button>
+                </div>
+            </div>
+
+            <div class="table-scroll-container">
                 <table>
                     <thead>
                         <tr>
@@ -619,13 +736,18 @@
                 logBox.removeChild(logBox.lastChild);
             }
         });
+        let allUsers = [];
+        let allSwaps = [];
+        let userPeriod = 'all';
+        let swapPeriod = 'all';
+
         async function loadAdminData() {
             try {
                 // Load Stats
                 const statsResponse = await fetch('/api/admin/stats');
                 if (statsResponse.ok) {
                     const stats = await statsResponse.json();
-                    document.getElementById('statsUsers').innerText = stats.usersCount;
+                    document.getElementById('statsUsers').innerText = stats.totalUsersCount || stats.usersCount;
                     document.getElementById('statsSwaps').innerText = stats.totalSwaps;
                     document.getElementById('statsCompleted').innerText = stats.completedSwaps;
                     document.getElementById('statsVolume').innerText = '₹' + stats.totalExchanged;
@@ -635,54 +757,15 @@
                 // Load Users
                 const usersResponse = await fetch('/api/admin/users');
                 if (usersResponse.ok) {
-                    const users = await usersResponse.json();
-                    const tbody = document.getElementById('usersTableBody');
-                    tbody.innerHTML = '';
-                    users.forEach(user => {
-                        const rating = user.avg_rating ? parseFloat(user.avg_rating).toFixed(1) : 'New';
-                        const actionBtn = user.is_blocked
-                            ? `<button class="btn-action btn-unblock" onclick="blockUser(${user.id})">Unblock</button>`
-                            : `<button class="btn-action btn-block" onclick="blockUser(${user.id})">Block</button>`;
-
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>#${user.id}</td>
-                                <td><strong>${user.name}</strong></td>
-                                <td>${user.email}</td>
-                                <td>${user.college}</td>
-                                <td>${user.total_swaps}</td>
-                                <td>⭐ ${rating}</td>
-                                <td>${actionBtn}</td>
-                            </tr>
-                        `;
-                    });
+                    allUsers = await usersResponse.json();
+                    renderUsers(allUsers);
                 }
 
                 // Load Swaps
                 const swapsResponse = await fetch('/api/admin/swaps');
                 if (swapsResponse.ok) {
-                    const swaps = await swapsResponse.json();
-                    const tbody = document.getElementById('swapsTableBody');
-                    tbody.innerHTML = '';
-                    swaps.forEach(swap => {
-                        const type = swap.type === 'need_cash' ? 'Needs Cash' : 'Needs UPI';
-                        const matched = swap.matched_name || '-';
-                        const date = new Date(swap.created_at).toLocaleDateString();
-                        const statusBadge = `<span class="badge badge-${swap.status}">${swap.status.toUpperCase()}</span>`;
-
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>#${swap.id}</td>
-                                <td>${type}</td>
-                                <td style="color:#00cec9; font-weight:bold;">₹${swap.amount}</td>
-                                <td>${swap.creator_name}</td>
-                                <td>${matched}</td>
-                                <td>${statusBadge}</td>
-                                <td>${date}</td>
-                                <td><button class="btn-action btn-delete" onclick="deleteSwap(${swap.id})">Delete</button></td>
-                            </tr>
-                        `;
-                    });
+                    allSwaps = await swapsResponse.json();
+                    renderSwaps(allSwaps);
                 }
 
                 // Load Settings
@@ -690,15 +773,13 @@
                 if (settingsResponse.ok) {
                     const settings = await settingsResponse.json();
                     const toggle = document.getElementById('emailToggle');
-                    if (settings.email_notifications_enabled === 'true') {
-                        toggle.checked = true;
-                    } else {
-                        toggle.checked = false;
+                    if (toggle) {
+                        toggle.checked = settings.email_notifications_enabled === 'true';
                     }
-                    if (settings.reminder_interval_hours) {
+                    if (settings.reminder_interval_hours && document.getElementById('intervalInput')) {
                         document.getElementById('intervalInput').value = settings.reminder_interval_hours;
                     }
-                    if (settings.max_reminders) {
+                    if (settings.max_reminders && document.getElementById('maxRemindersInput')) {
                         document.getElementById('maxRemindersInput').value = settings.max_reminders;
                     }
                 }
@@ -706,6 +787,119 @@
             } catch (err) {
                 console.error("Error loading admin data:", err);
             }
+        }
+
+        function renderUsers(users) {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding:2rem;">No matching users found</td></tr>';
+                return;
+            }
+            users.forEach(user => {
+                const rating = user.avg_rating ? parseFloat(user.avg_rating).toFixed(1) : 'New';
+                const actionBtn = user.is_blocked
+                    ? `<button class="btn-action btn-unblock" onclick="blockUser(${user.id})">Unblock</button>`
+                    : `<button class="btn-action btn-block" onclick="blockUser(${user.id})">Block</button>`;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>#${user.id}</td>
+                        <td><strong>${user.name}</strong></td>
+                        <td>${user.email}</td>
+                        <td>${user.college}</td>
+                        <td>${user.total_swaps}</td>
+                        <td>⭐ ${rating}</td>
+                        <td>${actionBtn}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderSwaps(swaps) {
+            const tbody = document.getElementById('swapsTableBody');
+            tbody.innerHTML = '';
+            if (swaps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-secondary); padding:2rem;">No matching swaps found</td></tr>';
+                return;
+            }
+            swaps.forEach(swap => {
+                const type = swap.type === 'need_cash' ? 'Needs Cash' : 'Needs UPI';
+                const matched = swap.matched_name || '-';
+                const date = new Date(swap.created_at).toLocaleDateString('en-IN');
+                const statusBadge = `<span class="badge badge-${swap.status}">${swap.status.toUpperCase()}</span>`;
+                const formattedAmount = '₹' + parseFloat(swap.amount).toFixed(2);
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>#${swap.id}</td>
+                        <td>${type}</td>
+                        <td class="amount-cyan">${formattedAmount}</td>
+                        <td>${swap.creator_name}</td>
+                        <td>${matched}</td>
+                        <td>${statusBadge}</td>
+                        <td>${date}</td>
+                        <td><button class="btn-action btn-delete" onclick="deleteSwap(${swap.id})">Delete</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        // --- Filtering Logic ---
+
+        function setUserPeriod(period, btn) {
+            userPeriod = period;
+            btn.parentElement.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filterUsers();
+        }
+
+        function setSwapPeriod(period, btn) {
+            swapPeriod = period;
+            btn.parentElement.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filterSwaps();
+        }
+
+        function isWithinPeriod(dateStr, period) {
+            if (period === 'all') return true;
+            const date = new Date(dateStr);
+            const now = new Date();
+            const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+
+            if (period === 'today') {
+                return date >= startOfDay;
+            }
+            if (period === 'week') {
+                const sevenDaysAgo = new Date(startOfDay.getTime() - (7 * 24 * 60 * 60 * 1000));
+                return date >= sevenDaysAgo;
+            }
+            return true;
+        }
+
+        function filterUsers() {
+            const query = document.getElementById('userSearch').value.toLowerCase();
+            const filtered = allUsers.filter(u => {
+                const matchesSearch = u.name.toLowerCase().includes(query) ||
+                    u.email.toLowerCase().includes(query) ||
+                    u.id.toString().includes(query);
+                const matchesPeriod = isWithinPeriod(u.created_at, userPeriod);
+                return matchesSearch && matchesPeriod;
+            });
+            renderUsers(filtered);
+        }
+
+        function filterSwaps() {
+            const query = document.getElementById('swapSearch').value.toLowerCase();
+            const filtered = allSwaps.filter(s => {
+                const matchesSearch = s.id.toString().includes(query) ||
+                    s.creator_name.toLowerCase().includes(query) ||
+                    s.amount.toString().includes(query) ||
+                    s.type.replace('_', ' ').toLowerCase().includes(query);
+                const matchesPeriod = isWithinPeriod(s.created_at, swapPeriod);
+                return matchesSearch && matchesPeriod;
+            });
+            renderSwaps(filtered);
         }
 
         async function toggleEmailNotifications(isEnabled) {
@@ -759,24 +953,10 @@
             }
         }
 
-        async function downloadReport() {
-            try {
-                const res = await fetch('/api/admin/report');
-                if (!res.ok) throw new Error('Failed to generate report');
-
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'SwapPay_Admin_Report.pdf';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-            } catch (err) {
-                alert('Error downloading report.');
-                console.error(err);
-            }
+        function downloadReport() {
+            // Simply redirect to the API endpoint. 
+            // The server sets Content-Disposition with the dynamic filename.
+            window.location.href = '/api/admin/report';
         }
 
         // Init

@@ -65,7 +65,7 @@ connection.connect((err) => {
                     const adminPasswordHash = await bcrypt.hash('admin123', 10);
                     const seedAdminQuery = `
                         INSERT IGNORE INTO users (name, phone, email, college, password, role) 
-                        VALUES ('System Admin', '0000000000', 'admin@swappay.com', 'AdminHQ', ?, 'admin')
+                        VALUES ('System Admin', '0000000000', 'swappay.official@gmail.com', 'AdminHQ', ?, 'admin')
                     `;
                     connection.query(seedAdminQuery, [adminPasswordHash], (seedErr) => {
                         if (seedErr) console.error('Error seeding admin user:', seedErr);

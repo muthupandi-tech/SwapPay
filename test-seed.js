@@ -15,7 +15,7 @@ connection.connect(async (err) => {
     const adminPasswordHash = await bcrypt.hash('admin123', 10);
     const query = `
         INSERT IGNORE INTO users (name, phone, email, college, password, role) 
-        VALUES ('System Admin', '0000000000', 'admin@swappay.com', 'AdminHQ', ?, 'admin')
+        VALUES ('System Admin', '0000000000', 'swappay.official@gmail.com', 'AdminHQ', ?, 'admin')
     `;
 
     connection.query(query, [adminPasswordHash], (err, results) => {

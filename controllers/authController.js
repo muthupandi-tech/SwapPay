@@ -85,7 +85,7 @@ exports.loginUser = async (req, res) => {
         return res.json({ 
             success: true, 
             message: 'Login successful!', 
-            redirect: user.role === 'admin' ? '/admin-dashboard' : '/dashboard' 
+            redirect: user.role === 'admin' ? '/admin' : '/dashboard' 
         });
 
     } catch (error) {
