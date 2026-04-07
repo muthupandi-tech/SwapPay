@@ -170,35 +170,67 @@ h1, h2, h3, h4, .logo {
 }
 
 .btn-primary,
-.btn-secondary {
-    padding: 1rem 2rem;
-    border-radius: 50px;
-    font-size: 1.1rem;
-    font-weight: 600;
+.btn-secondary,
+.btn-submit,
+.btn-premium,
+.btn-glass {
+    padding: 0.8rem 1.8rem;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
     text-decoration: none;
-    transition: transform 0.3s, box-shadow 0.3s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
+    outline: none;
 }
 
-.btn-primary {
+.btn-primary, .btn-submit {
     background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
     color: white;
-    box-shadow: 0 10px 20px rgba(108, 92, 231, 0.3);
+    box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
 }
 
-.btn-primary:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 15px 25px rgba(108, 92, 231, 0.4);
+.btn-premium {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    color: white;
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3), 0 4px 6px -2px rgba(99, 102, 241, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.btn-secondary {
-    background: var(--glass-bg);
-    color: var(--text-primary);
+.btn-glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--glass-border);
+    color: var(--text-primary);
 }
 
-.btn-secondary:hover {
+.btn-primary:hover, .btn-submit:hover, .btn-premium:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
+    filter: brightness(1.1);
+}
+
+.btn-glass:hover {
     background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-3px);
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary:active, .btn-submit:active, .btn-premium:active, .btn-glass:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.btn-primary:disabled, .btn-submit:disabled, .btn-premium:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
 }
 
 /* Glass Card */
