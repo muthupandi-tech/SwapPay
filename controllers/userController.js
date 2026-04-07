@@ -1,4 +1,5 @@
 const mysql = require('mysql2');
+const bcrypt = require('bcrypt');
 
 // Database connection using the configured details
 const pool = mysql.createPool({
@@ -233,6 +234,43 @@ exports.updateSettings = async (req, res) => {
         res.json({ success: true, message: 'Settings updated successfully.' });
     } catch (error) {
         console.error('Error updating settings:', error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+};
+
+exports.changePassword = async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { oldPassword, newPassword } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized route. Please login first.' });
+        }
+
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ error: 'Old and new passwords are required.' });
+        }
+
+        // Fetch current password
+        const [rows] = await promisePool.execute('SELECT password FROM users WHERE id = ?', [userId]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        const user = rows[0];
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Incorrect old password.' });
+        }
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        await promisePool.execute('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+
+        res.json({ success: true, message: 'Password updated successfully ✅' });
+
+    } catch (error) {
+        console.error('Error changing password:', error);
         res.status(500).json({ error: 'Internal server error.' });
     }
 };

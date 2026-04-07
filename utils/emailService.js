@@ -665,6 +665,49 @@ async function sendContactEmail(name, email, message) {
     }
 }
 
+/**
+ * Reset Password Email Template
+ */
+async function sendResetPasswordEmail(toEmail, token) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
+
+    const content = `
+        <h3 style="color: #60a5fa; margin-top: 0;">Password Reset Requested</h3>
+        <p>We received a request to reset your password for your SwapPay account.</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset My Password</a>
+        </div>
+        
+        <p>This link will expire in <strong>15 minutes</strong> for security reasons.</p>
+        <p>If you did not request this, you can safely ignore this email. Your password will remain unchanged.</p>
+        
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #94a3b8;">If the button doesn't work, copy and paste this link into your browser:</p>
+        <p style="font-size: 12px; color: #94a3b8; word-break: break-all;">${resetLink}</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Security" <${senderEmail}>`,
+        to: toEmail,
+        subject: "SwapPay Password Reset Request",
+        html: getEmailTemplateWrapper("Reset Your Password", content)
+    };
+
+    try {
+        const info = await t.sendMail(mailOptions);
+        console.log(`Sent Reset Password Email to ${toEmail}`);
+        if (info.messageId && t.options.host === "smtp.ethereal.email") {
+            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
+        }
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send reset password email to ${toEmail}:`, error);
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
@@ -677,5 +720,6 @@ module.exports = {
     sendBestMatchFoundEmail,
     sendOTPEmail,
     sendTrustWarningEmail,
-    sendContactEmail
+    sendContactEmail,
+    sendResetPasswordEmail
 };

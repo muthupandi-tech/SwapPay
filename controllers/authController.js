@@ -222,3 +222,70 @@ exports.resendOTP = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Server error during OTP logic.' });
     }
 };
+
+exports.forgotPassword = async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    try {
+        const [rows] = await promisePool.execute('SELECT id FROM users WHERE email = ?', [email]);
+        if (rows.length === 0) {
+            // For security, don't reveal if email exists or not
+            return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+        }
+
+        const crypto = require('crypto');
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        await promisePool.execute(
+            'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
+            [token, expiry, rows[0].id]
+        );
+
+        await emailService.sendResetPasswordEmail(email, token);
+
+        return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+    } catch (error) {
+        console.error('Forgot Password Error:', error);
+        return res.status(500).json({ success: false, message: 'Server error during forgot password process.' });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+        return res.status(400).json({ success: false, message: 'Token and new password are required.' });
+    }
+
+    try {
+        const [rows] = await promisePool.execute(
+            'SELECT id, reset_token_expiry FROM users WHERE reset_token = ?',
+            [token]
+        );
+
+        if (rows.length === 0) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired reset token.' });
+        }
+
+        const user = rows[0];
+        if (new Date(user.reset_token_expiry) < new Date()) {
+            return res.status(400).json({ success: false, message: 'Reset token has expired.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        await promisePool.execute(
+            'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
+            [hashedPassword, user.id]
+        );
+
+        return res.json({ success: true, message: 'Password has been reset successfully. You can now log in.' });
+    } catch (error) {
+        console.error('Reset Password Error:', error);
+        return res.status(500).json({ success: false, message: 'Server error during password reset.' });
+    }
+};

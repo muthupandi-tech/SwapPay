@@ -64,3 +64,37 @@ window.togglePasswordVisibility = function(inputId, btn) {
         setTimeout(() => btn.style.transform = '', 100);
     }, 100);
 };
+
+/**
+ * Global Password Strength Logic
+ * @param {string} value - The password string
+ * @param {string} indicatorId - The ID of the indicator element
+ */
+window.updatePasswordStrength = function(value, indicatorId) {
+    const indicator = document.getElementById(indicatorId);
+    if (!indicator) return;
+
+    if (!value) {
+        indicator.innerHTML = '';
+        indicator.className = 'password-strength';
+        return;
+    }
+
+    let strength = 0;
+    let label = 'Weak';
+    let colorClass = 'strength-weak';
+
+    if (value.length > 6) strength++;
+    if (/[0-9]/.test(value)) strength++;
+    if (/[^A-Za-z0-9]/.test(value)) strength++;
+
+    if (strength === 2) {
+        label = 'Medium';
+        colorClass = 'strength-medium';
+    } else if (strength === 3) {
+        label = 'Strong';
+        colorClass = 'strength-strong';
+    }
+
+    indicator.innerHTML = `Strength: <span class="${colorClass}">${label}</span>`;
+};

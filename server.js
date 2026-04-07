@@ -220,6 +220,20 @@ app.get('/verify-otp', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'verify-otp.html'));
 });
 
+app.get('/forgot-password', (req, res) => {
+    if (req.session && req.session.userId) {
+        return res.redirect('/dashboard');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'forgot-password.html'));
+});
+
+app.get('/reset-password', (req, res) => {
+    if (req.session && req.session.userId) {
+        return res.redirect('/dashboard');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'reset-password.html'));
+});
+
 // Protected Route for Dashboard
 app.get('/dashboard', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
@@ -233,6 +247,11 @@ app.get('/profile', requireLogin, (req, res) => {
 // Protected Route for Settings
 app.get('/settings', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'settings.html'));
+});
+
+// Protected Route for Security Settings
+app.get('/settings/security', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'settings-security.html'));
 });
 
 // Protected Route for Admin Dashboard

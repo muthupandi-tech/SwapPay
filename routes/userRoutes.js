@@ -18,5 +18,6 @@ router.post('/location', requireLoginAPI, userController.postLocation);
 router.post('/auto-match', requireLoginAPI, userController.updateAutoMatch);
 router.get('/settings', requireLoginAPI, userController.getSettings);
 router.post('/settings', requireLoginAPI, userController.updateSettings);
+router.post('/change-password', requireLoginAPI, userController.changePassword);
 
 module.exports = router;
