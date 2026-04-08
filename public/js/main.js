@@ -64,6 +64,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     navSlide();
+
+    // Conditional Navbar Icons Visibility (Dashboard only)
+    const updateNavbarVisibility = () => {
+        const path = window.location.pathname.toLowerCase();
+        const isDashboard = path.includes("/dashboard");
+
+        const guide = document.getElementById("guideIcon");
+        const notif = document.getElementById("notificationIcon");
+
+        if (!isDashboard) {
+            // Use setProperty with 'important' to override guide.css display:flex
+            if (guide) guide.style.setProperty("display", "none", "important");
+            if (notif) notif.style.setProperty("display", "none", "important");
+        } else {
+            if (guide) guide.style.removeProperty("display");
+            if (notif) notif.style.removeProperty("display");
+        }
+    };
+
+    // Run immediately after DOM ready
+    updateNavbarVisibility();
+    // Run again after guide.js has had time to inject/execute
+    setTimeout(updateNavbarVisibility, 200);
 });
 
 // Navbar Dropdown Logic

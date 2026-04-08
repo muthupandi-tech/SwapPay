@@ -845,79 +845,7 @@
             /* hidden by default */
         }
 
-        .notification-dropdown {
-            position: absolute;
-            top: 150%;
-            right: -20px;
-            width: 350px;
-            background: var(--bg-color);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-            max-height: 400px;
-            overflow-y: auto;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-            z-index: 999;
-            padding: 1rem 0;
-        }
 
-        .notification-dropdown.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-
-        .dropdown-header {
-            padding: 0 1.5rem 1rem 1.5rem;
-            border-bottom: 1px solid var(--glass-border);
-            font-weight: bold;
-            font-size: 1.1rem;
-            color: var(--text-primary);
-        }
-
-        .notification-item {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            transition: background 0.2s;
-            cursor: pointer;
-        }
-
-        .notification-item:hover {
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .notification-item.unread {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .notification-item.unread p {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .notification-item p {
-            margin: 0;
-            font-size: 0.95rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        .notification-time {
-            font-size: 0.75rem;
-            color: #888;
-            margin-top: 0.5rem;
-            display: block;
-        }
-
-        .no-notifications {
-            padding: 2rem 1.5rem;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
 
         /* Toast Notification */
         .toast-container {
@@ -962,83 +890,6 @@
             font-size: 0.95rem;
         }
 
-        /* Profile Dropdown Styles */
-        .user-profile-container {
-            position: relative;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-        }
-
-        .profile-avatar {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 1.5rem;
-            color: white;
-            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .user-profile-container:hover .profile-avatar {
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(108, 92, 231, 0.5);
-        }
-
-        .profile-dropdown {
-            position: absolute;
-            top: 130%;
-            right: 0;
-            width: 200px;
-            background: var(--bg-color);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-            z-index: 999;
-            overflow: hidden;
-        }
-
-        .profile-dropdown.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-
-        .profile-dropdown-item {
-            display: block;
-            padding: 1rem 1.5rem;
-            color: var(--text-primary);
-            text-decoration: none;
-            font-weight: 600;
-            transition: background 0.2s, padding-left 0.2s;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .profile-dropdown-item:last-child {
-            border-bottom: none;
-        }
-
-        .profile-dropdown-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-            padding-left: 1.8rem;
-        }
-
-        .profile-dropdown-item.text-danger {
-            color: #ff6b6b;
-        }
-
-        .profile-dropdown-item.text-danger:hover {
-            background: rgba(255, 107, 107, 0.1);
-        }
-
         /* Feed Specific Styles Requested by User */
         #swapFeedContainer .swap-card {
             background: #111;
@@ -1067,12 +918,12 @@
         <div class="logo">Swap<span>Pay</span></div>
         <div class="navbar-right">
             <!-- Guide Icon -->
-            <div class="guide-nav-icon" id="guideToggle">
+            <div class="guide-nav-icon" id="guideIcon">
                 📘<span class="guide-tooltip">Guide</span>
             </div>
 
             <!-- Notification Bell -->
-            <div class="notification-container" onclick="toggleNotifications(event)">
+            <div class="notification-container" id="notificationIcon" onclick="toggleNotifications(event)">
                 <div class="bell-icon" id="notification-bell">🔔</div>
                 <div class="notification-badge" id="notifBadge">0</div>
 

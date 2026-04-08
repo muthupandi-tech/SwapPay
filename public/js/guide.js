@@ -141,6 +141,9 @@
 
     // Function to inject everything
     function initGuide() {
+        const path = window.location.pathname.toLowerCase();
+        const isDashboard = path.includes('/dashboard');
+
         // 1. Inject CSS and HTML if not already there
         if (!document.getElementById('guideModal')) {
             const container = document.createElement('div');
@@ -148,8 +151,11 @@
             document.body.appendChild(container);
         }
 
+        // 2. Only initialize icon & events on Dashboard
+        if (!isDashboard) return;
+
         // 2. Inject Navbar Icon
-        let guideToggle = document.getElementById('guideToggle');
+        let guideToggle = document.getElementById('guideIcon');
         
         if (!guideToggle) {
             const navLinks = document.querySelector('.nav-links') || document.querySelector('.navbar-right');
@@ -158,7 +164,7 @@
             if (navLinks && notifContainer) {
                 const guideLi = document.createElement('div');
                 guideLi.className = 'guide-nav-icon';
-                guideLi.id = 'guideToggle';
+                guideLi.id = 'guideIcon';
                 guideLi.innerHTML = `📘<span class="guide-tooltip">Guide</span>`;
 
                 // Insert before notification container
