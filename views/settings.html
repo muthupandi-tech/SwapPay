@@ -8,6 +8,26 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/guide.css">
     <style>
+        @media screen and (max-width: 600px) {
+            .profile-header h1 {
+                font-size: 1.8rem !important;
+            }
+
+            .card {
+                padding: 1.5rem !important;
+            }
+
+            .setting-row {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1rem;
+            }
+
+            .btn-premium, .btn-glass {
+                width: 100% !important;
+            }
+        }
+
         .profile-container {
             padding: 3rem 5%;
             max-width: 800px;
@@ -143,9 +163,15 @@
 
     <nav class="navbar">
         <div class="logo">Swap<span>Pay</span></div>
-        <ul class="nav-links" style="display: flex; align-items: center;">
-            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Back to Dashboard</a></li>
+        <ul class="nav-links">
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/profile">Profile</a></li>
         </ul>
+        <div class="hamburger">
+            <div class="line1"></div>
+            <div class="line2"></div>
+            <div class="line3"></div>
+        </div>
     </nav>
 
     <main class="profile-container">
@@ -327,6 +353,7 @@
         // Init
         document.addEventListener('DOMContentLoaded', loadSettings);
     </script>
+    <script src="/js/main.js"></script>
     <script src="/js/guide.js"></script>
 </body>
 </html>

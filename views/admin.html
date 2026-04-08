@@ -447,6 +447,7 @@
         .table-scroll-container {
             max-height: 550px; /* Approx 10 rows */
             overflow-y: auto;
+            overflow-x: auto;
             border-radius: 8px;
             scrollbar-width: thin;
             scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
@@ -460,6 +461,44 @@
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
         }
+
+        @media screen and (max-width: 900px) {
+            .dashboard-header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1.5rem;
+            }
+
+            .dashboard-header h1 {
+                font-size: 1.8rem !important;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .section-box {
+                padding: 1rem !important;
+            }
+
+            .search-filter-bar {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+
+            .filter-group {
+                justify-content: space-between !important;
+            }
+            
+            .stat-card {
+                padding: 1.5rem !important;
+            }
+
+            .dashboard-header button {
+                width: 100%;
+                margin-top: 1rem;
+            }
+        }
     </style>
 </head>
 
@@ -470,9 +509,14 @@
     <nav class="navbar">
         <div class="logo">Swap<span>Pay</span> Admin</div>
         <ul class="nav-links">
-            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none;">Back to App</a></li>
+            <li><a href="/dashboard">Back to App</a></li>
             <li><a href="/api/auth/logout" class="btn-logout">Logout</a></li>
         </ul>
+        <div class="hamburger">
+            <div class="line1"></div>
+            <div class="line2"></div>
+            <div class="line3"></div>
+        </div>
     </nav>
 
     <main class="dashboard-container">
@@ -702,6 +746,7 @@
 
     <!-- Socket.IO -->
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/main.js"></script>
 
     <script>
         // Init Socket.IO for global admin tracking

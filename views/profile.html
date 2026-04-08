@@ -9,6 +9,37 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/guide.css">
     <style>
+        @media screen and (max-width: 768px) {
+            .profile-header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1.5rem;
+            }
+
+            .profile-header h1 {
+                font-size: 1.8rem !important;
+            }
+
+            .btn-edit {
+                width: 100% !important;
+            }
+
+            .card {
+                padding: 1.5rem !important;
+            }
+
+            .info-row {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 0.3rem;
+            }
+
+            .info-value {
+                text-align: left !important;
+                max-width: 100% !important;
+            }
+        }
+
         .profile-container {
             padding: 3rem 5%;
             max-width: 1000px;
@@ -311,10 +342,15 @@
 
     <nav class="navbar">
         <div class="logo">Swap<span>Pay</span></div>
-        <ul class="nav-links" style="display: flex; align-items: center;">
-            <li><a href="/dashboard" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Back to Dashboard</a></li>
-            <li><a href="/settings" style="color: var(--text-secondary); text-decoration: none; font-weight: 600; margin-left: 2rem;">Settings</a></li>
+        <ul class="nav-links">
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/settings">Settings</a></li>
         </ul>
+        <div class="hamburger">
+            <div class="line1"></div>
+            <div class="line2"></div>
+            <div class="line3"></div>
+        </div>
     </nav>
 
     <main class="profile-container">
@@ -581,6 +617,7 @@
         document.addEventListener('DOMContentLoaded', loadProfile);
 
     </script>
+    <script src="/js/main.js"></script>
     <script src="/js/guide.js"></script>
 </body>
 

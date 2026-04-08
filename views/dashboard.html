@@ -9,6 +9,49 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/guide.css">
     <style>
+        @media screen and (max-width: 900px) {
+            .dashboard-header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1.5rem;
+            }
+
+            .dashboard-header h1 {
+                font-size: 1.8rem !important;
+            }
+
+            .actions-panel {
+                flex-direction: column !important;
+            }
+
+            .action-card {
+                max-width: 100% !important;
+            }
+
+            .dashboard-stats {
+                grid-template-columns: 1fr !important;
+            }
+
+            .modal-content {
+                width: 95% !important;
+                padding: 1.5rem !important;
+            }
+            
+            .tabs-container {
+                overflow-x: auto;
+                white-space: nowrap;
+                padding-bottom: 10px;
+            }
+            
+            .swaps-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .search-filter-container {
+                flex-direction: column !important;
+            }
+        }
+
         .dashboard-container {
             padding: 3rem 5%;
             max-width: 1200px;
@@ -1037,7 +1080,14 @@
             <li id="adminNavBtn" style="display: none;"><a href="/admin"
                     style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin
                     Panel</a></li>
+            <li><a href="/profile" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Profile</a></li>
+            <li><a href="/settings" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Settings</a></li>
         </ul>
+        <div class="hamburger">
+            <div class="line1"></div>
+            <div class="line2"></div>
+            <div class="line3"></div>
+        </div>
     </nav>
     <main class="dashboard-container">
         <div id="trustWarningContainer"></div>
@@ -2995,6 +3045,7 @@
         };
 
     </script>
+    <script src="/js/main.js"></script>
     <script src="/js/guide.js"></script>
 </body>
 

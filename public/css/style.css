@@ -223,6 +223,17 @@ h1, h2, h3, h4, .logo {
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
 .btn-primary:active, .btn-submit:active, .btn-premium:active, .btn-glass:active {
     transform: translateY(0) scale(0.98);
 }
@@ -622,7 +633,62 @@ h1, h2, h3, h4, .logo {
     }
 
     .nav-links {
-        display: none;
+        position: fixed;
+        right: 0px;
+        height: 100vh;
+        top: 0px;
+        background-color: #0f1322; /* Solid dark background for mobile menu */
+        display: flex !important; /* Force display when active */
+        flex-direction: column;
+        align-items: center;
+        width: 70%;
+        transform: translateX(100%);
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        padding-top: 100px;
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+        z-index: 100;
+        gap: 3rem;
+    }
+
+    .nav-links.nav-active {
+        transform: translateX(0%);
+    }
+
+    .nav-links li {
+        width: 100%;
+        text-align: center;
+    }
+
+    .nav-links a {
+        font-size: 1.2rem;
+        display: block;
+        width: 100%;
+    }
+
+    .hamburger {
+        display: block;
+        cursor: pointer;
+        z-index: 101;
+    }
+
+    .hamburger div {
+        width: 25px;
+        height: 2px;
+        background-color: var(--text-primary);
+        margin: 6px;
+        transition: all 0.3s ease;
+        border-radius: 2px;
+    }
+
+    /* Hamburger Animation */
+    .toggle .line1 {
+        transform: rotate(-45deg) translate(-5px, 6px);
+    }
+    .toggle .line2 {
+        opacity: 0;
+    }
+    .toggle .line3 {
+        transform: rotate(45deg) translate(-5px, -6px);
     }
 
     .how-it-works, .features-section {

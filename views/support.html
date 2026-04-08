@@ -8,6 +8,25 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/guide.css">
     <style>
+        @media screen and (max-width: 600px) {
+            .support-header h1 {
+                font-size: 2rem !important;
+            }
+
+            .tabs {
+                flex-direction: column !important;
+                gap: 5px;
+            }
+
+            .support-card {
+                padding: 1.5rem !important;
+            }
+
+            .btn-submit {
+                font-size: 1rem !important;
+            }
+        }
+
         .support-container {
             padding: 3rem 5%;
             max-width: 900px;
@@ -173,6 +192,11 @@
             <li><a href="/dashboard">Dashboard</a></li>
             <li><a href="/settings">Settings</a></li>
         </ul>
+        <div class="hamburger">
+            <div class="line1"></div>
+            <div class="line2"></div>
+            <div class="line3"></div>
+        </div>
     </nav>
 
     <main class="support-container">
@@ -345,6 +369,7 @@
             window.location.reload();
         }
     </script>
+    <script src="/js/main.js"></script>
     <script src="/js/guide.js"></script>
 </body>
 </html>
