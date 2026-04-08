@@ -860,7 +860,7 @@
             visibility: hidden;
             transform: translateY(10px);
             transition: all 0.3s ease;
-            z-index: 1000;
+            z-index: 999;
             padding: 1rem 0;
         }
 
@@ -1002,7 +1002,7 @@
             visibility: hidden;
             transform: translateY(10px);
             transition: all 0.3s ease;
-            z-index: 1000;
+            z-index: 999;
             overflow: hidden;
         }
 
@@ -1065,8 +1065,14 @@
     <div class="blob blob-2"></div>
     <nav class="navbar">
         <div class="logo">Swap<span>Pay</span></div>
-        <ul class="nav-links" style="display: flex; align-items: center;">
-            <li class="notification-container" onclick="toggleNotifications(event)">
+        <div class="navbar-right">
+            <!-- Guide Icon -->
+            <div class="guide-nav-icon" id="guideToggle">
+                📘<span class="guide-tooltip">Guide</span>
+            </div>
+
+            <!-- Notification Bell -->
+            <div class="notification-container" onclick="toggleNotifications(event)">
                 <div class="bell-icon" id="notification-bell">🔔</div>
                 <div class="notification-badge" id="notifBadge">0</div>
 
@@ -1076,17 +1082,28 @@
                         <!-- Notifications will be injected here -->
                     </div>
                 </div>
-            </li>
-            <li id="adminNavBtn" style="display: none;"><a href="/admin"
-                    style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin
-                    Panel</a></li>
-            <li><a href="/profile" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Profile</a></li>
-            <li><a href="/settings" style="color: var(--text-secondary); text-decoration: none; font-weight: 600;">Settings</a></li>
-        </ul>
-        <div class="hamburger">
-            <div class="line1"></div>
-            <div class="line2"></div>
-            <div class="line3"></div>
+            </div>
+
+            <!-- Avatar Dropdown (Moved from Header) -->
+            <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
+                <div class="profile-avatar">👤</div>
+                <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
+                    <a href="/profile" class="profile-dropdown-item">View Profile</a>
+                    <a href="/settings" class="profile-dropdown-item">Settings</a>
+                    <a href="/api/auth/logout" class="profile-dropdown-item text-danger">Logout</a>
+                </div>
+            </div>
+
+            <!-- Admin Link (If needed) -->
+            <div id="adminNavBtn" style="display: none;">
+                <a href="/admin" style="color: #ff6b6b; font-weight: bold; text-decoration: none; background: rgba(255,107,107,0.1); padding: 0.5rem 1rem; border-radius: 5px;">Admin</a>
+            </div>
+
+            <div class="hamburger">
+                <div class="line1"></div>
+                <div class="line2"></div>
+                <div class="line3"></div>
+            </div>
         </div>
     </nav>
     <main class="dashboard-container">
@@ -1097,14 +1114,6 @@
                     ← Back to Admin
                 </button>
                 <h1 style="margin: 0;">Welcome to your <span>Dashboard</span></h1>
-            </div>
-            <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
-                <div class="profile-avatar">👤</div>
-                <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
-                    <a href="/profile" class="profile-dropdown-item">View Profile</a>
-                    <a href="/settings" class="profile-dropdown-item">Settings</a>
-                    <a href="/api/auth/logout" class="profile-dropdown-item text-danger">Logout</a>
-                </div>
             </div>
         </div>
         <div class="dashboard-stats">

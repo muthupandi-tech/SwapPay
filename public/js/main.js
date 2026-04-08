@@ -40,8 +40,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hamburger Menu Logic
     const navSlide = () => {
         const hamburger = document.querySelector('.hamburger');
-        const nav = document.querySelector('.nav-links');
-        const navLinks = document.querySelectorAll('.nav-links li');
+        const nav = document.querySelector('.navbar-right');
+        const navLinks = document.querySelectorAll('.navbar-right > div');
 
         if (hamburger && nav) {
             hamburger.addEventListener('click', () => {
@@ -64,6 +64,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     navSlide();
+});
+
+// Navbar Dropdown Logic
+window.toggleNotifications = function(event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('notifDropdown');
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (profileDropdown) profileDropdown.classList.remove('active');
+    if (dropdown) dropdown.classList.toggle('active');
+};
+
+window.toggleProfileDropdown = function(event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('profileDropdown');
+    const notifDropdown = document.getElementById('notifDropdown');
+    if (notifDropdown) notifDropdown.classList.remove('active');
+    if (dropdown) dropdown.classList.toggle('active');
+};
+
+window.addEventListener('click', function(event) {
+    const notifDropdown = document.getElementById('notifDropdown');
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (notifDropdown && notifDropdown.classList.contains('active')) {
+        notifDropdown.classList.remove('active');
+    }
+    if (profileDropdown && profileDropdown.classList.contains('active')) {
+        profileDropdown.classList.remove('active');
+    }
 });
 
 // Animation Keyframes for mobile nav links

@@ -149,20 +149,27 @@
         }
 
         // 2. Inject Navbar Icon
-        const navLinks = document.querySelector('.nav-links');
-        const notifContainer = document.querySelector('.notification-container');
+        let guideToggle = document.getElementById('guideToggle');
+        
+        if (!guideToggle) {
+            const navLinks = document.querySelector('.nav-links') || document.querySelector('.navbar-right');
+            const notifContainer = document.querySelector('.notification-container');
 
-        if (navLinks && notifContainer && !document.getElementById('guideToggle')) {
-            const guideLi = document.createElement('li');
-            guideLi.className = 'guide-nav-icon';
-            guideLi.id = 'guideToggle';
-            guideLi.innerHTML = `📘<span class="guide-tooltip">Guide</span>`;
+            if (navLinks && notifContainer) {
+                const guideLi = document.createElement('div');
+                guideLi.className = 'guide-nav-icon';
+                guideLi.id = 'guideToggle';
+                guideLi.innerHTML = `📘<span class="guide-tooltip">Guide</span>`;
 
-            // Insert before notification container
-            navLinks.insertBefore(guideLi, notifContainer);
+                // Insert before notification container
+                navLinks.insertBefore(guideLi, notifContainer);
+                guideToggle = guideLi;
+            }
+        }
 
+        if (guideToggle) {
             // Add Click Event
-            guideLi.addEventListener('click', openGuide);
+            guideToggle.addEventListener('click', openGuide);
         }
 
         // 3. Modal Events

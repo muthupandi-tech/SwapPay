@@ -77,6 +77,29 @@ h1, h2, h3, h4, .logo {
     z-index: 100;
 }
 
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* Ensure icons are consistent */
+.guide-nav-icon, .bell-icon, .profile-avatar {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 1.2rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+}
+
+.profile-avatar {
+    width: 32px !important; /* Slightly larger for avatar */
+    height: 32px !important;
+    border-radius: 50%;
+}
+
 .logo {
     font-size: 1.8rem;
     font-weight: 800;
@@ -617,6 +640,20 @@ h1, h2, h3, h4, .logo {
 }
 
 /* Responsive */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 10px 16px;
+    }
+
+    .navbar-right {
+        gap: 10px;
+    }
+
+    .logo {
+        font-size: 18px;
+    }
+}
+
 @media (max-width: 900px) {
     .hero {
         flex-direction: column;
@@ -632,7 +669,7 @@ h1, h2, h3, h4, .logo {
         font-size: 3rem;
     }
 
-    .nav-links {
+    .navbar-right {
         position: fixed;
         right: 0px;
         height: 100vh;
@@ -650,16 +687,16 @@ h1, h2, h3, h4, .logo {
         gap: 3rem;
     }
 
-    .nav-links.nav-active {
+    .navbar-right.nav-active {
         transform: translateX(0%);
     }
 
-    .nav-links li {
+    .navbar-right > div {
         width: 100%;
         text-align: center;
     }
 
-    .nav-links a {
+    .navbar-right a {
         font-size: 1.2rem;
         display: block;
         width: 100%;
