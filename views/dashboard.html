@@ -1712,8 +1712,11 @@
                 timeStrHTML = `<span>Completed:</span> <strong>${cDate.toLocaleString("en-IN", formatOpts)}</strong>`;
             }
 
-            const amountToDisplay = swap.remaining_amount !== undefined && swap.remaining_amount !== null ? swap.remaining_amount : swap.amount;
-            const remainingLabel = swap.remaining_amount !== undefined && swap.remaining_amount !== null && parseFloat(swap.remaining_amount) < parseFloat(swap.total_amount || swap.amount) 
+            // Use remaining_amount only for active/open swaps. For matched/completed, show the match amount.
+            const isPending = swap.status === 'active' || swap.status === 'open';
+            const amountToDisplay = (isPending && swap.remaining_amount !== undefined && swap.remaining_amount !== null) ? swap.remaining_amount : swap.amount;
+            
+            const remainingLabel = isPending && swap.remaining_amount !== undefined && swap.remaining_amount !== null && parseFloat(swap.remaining_amount) < parseFloat(swap.total_amount || swap.amount) 
                 ? `<div style="font-size: 0.75rem; color: #2ecc71; font-weight: bold; margin-bottom: 2px;">Remaining: ₹${swap.remaining_amount}</div>` 
                 : '';
 
@@ -1950,12 +1953,15 @@
                             
                             let chunksHtml = parentSwap.childChunks.map(child => createSwapCardHTML(child, true)).join('');
 
-                            container.innerHTML += `
+            const parentIsCash = parentSwap.type === 'need_cash';
+            const parentBadgeClass = parentIsCash ? 'type-cash' : 'type-upi';
+
+            container.innerHTML += `
 <div class="swap-card" style="grid-column: 1 / -1; ${glowStyle} gap: 0;">
     <div class="swap-card-header" style="margin-bottom: 1rem;">
         <div>
             <h3 style="margin-bottom: 0.2rem;">Crowd-Swap Container</h3>
-            <span class="swap-type-badge need-cash" style="background: rgba(232, 67, 147, 0.1); color: var(--accent-secondary);">₹${matched} Matched — ₹${remaining} Remaining</span>
+            <span class="swap-type-badge ${parentBadgeClass}" style="background: ${parentIsCash ? 'rgba(59, 130, 246, 0.1)' : 'rgba(232, 67, 147, 0.1)'}; color: ${parentIsCash ? '#3b82f6' : 'var(--accent-secondary)'};">₹${matched} Matched — ₹${remaining} Remaining</span>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary)">₹${total}</div>
