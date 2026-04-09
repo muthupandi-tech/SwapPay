@@ -32,8 +32,8 @@ exports.createSwap = async (req, res) => {
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
 
         // 1. Insert the PARENT swap request initially
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng]);
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
         const newParentSwapId = result.insertId;
 
         if (!userAutoMatch) {
@@ -1233,12 +1233,11 @@ exports.acceptSwap = async (req, res) => {
     try {
         console.log("---- ACCEPT SWAP START ----");
         console.log("Request body:", req.body);
-
-        const { swapId } = req.body;
-
+        const { swapId, mode, parentSwapId } = req.body;
         const currentUserId = req.user?.id || req.body.userId || req.session?.userId;
 
         console.log("Current User:", currentUserId);
+        console.log("Mode:", mode, "ParentSwapId:", parentSwapId);
 
         if (!swapId) {
             return res.status(400).json({ error: "swapId missing" });
@@ -1249,33 +1248,78 @@ exports.acceptSwap = async (req, res) => {
         }
 
         const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
-        
         const swap = swapRows.length > 0 ? swapRows[0] : null;
-
-        console.log("Swap found:", swap);
 
         if (!swap) {
             return res.status(404).json({ error: "Swap not found" });
         }
 
         if (Number(swap.user_id) === Number(currentUserId)) {
-            console.log("Blocking self-acceptance:", swap.user_id, currentUserId);
-            return res.status(400).json({
-                error: "Cannot accept your own swap"
-            });
+            return res.status(400).json({ error: "Cannot accept your own swap" });
         }
 
         const validStatuses = ['active', 'open', 'pending'];
-        const currentStatus = swap.status ? swap.status.toLowerCase() : '';
-        if (!validStatuses.includes(currentStatus)) {
-            console.log("Blocking inactive status:", swap.status);
-            return res.status(400).json({
-                error: "Swap already matched or inactive"
-            });
+        if (!validStatuses.includes(swap.status.toLowerCase())) {
+            return res.status(400).json({ error: "Swap already matched or inactive" });
         }
 
-        console.log("Inserting match...");
+        let myFinalSwapId = null;
 
+        if (mode === 'continue' && parentSwapId) {
+            // --- PARTIAL MERGE LOGIC ---
+            const [pRows] = await pool.execute('SELECT * FROM swaps WHERE id = ? AND user_id = ?', [parentSwapId, currentUserId]);
+            if (pRows.length === 0) return res.status(404).json({ error: "Parent swap not found" });
+            
+            const parentSwap = pRows[0];
+            const matchAmount = parseFloat(swap.remaining_amount || swap.amount);
+            const parentRemaining = parseFloat(parentSwap.remaining_amount);
+
+            if (parentRemaining < matchAmount) {
+                return res.status(400).json({ error: "Insufficient remaining amount in your swap to cover this match." });
+            }
+
+            // Deduct from parent
+            const newRemaining = parentRemaining - matchAmount;
+            const newParentStatus = newRemaining <= 0 ? 'matched' : 'active';
+            
+            await pool.execute(
+                'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
+                [newRemaining, newParentStatus, newParentStatus, parentSwapId]
+            );
+
+            // Create a new child swap for User B to represent this match
+            const [childResult] = await pool.execute(`
+                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+            `, [
+                currentUserId, parentSwap.type, matchAmount, matchAmount, 0, parentSwap.location, 'matched', swap.user_id, parentSwapId, swapId
+            ]);
+            
+            myFinalSwapId = childResult.insertId;
+            console.log(`Merged match into existing swap ${parentSwapId}. New child swap: ${myFinalSwapId}`);
+
+        } else {
+            // --- CREATE NEW (Standard Logic) ---
+            const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+            const [childResult] = await pool.execute(`
+                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, matched_parent_swap_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+            `, [
+                currentUserId, oppositeType, swap.amount, swap.amount, 0, swap.location, 'matched', swap.user_id, swapId
+            ]);
+            myFinalSwapId = childResult.insertId;
+        }
+
+        // Update the requester's swap (the one being accepted)
+        await pool.execute(`
+          UPDATE swaps
+          SET status = 'matched',
+              matched_user_id = ?,
+              match_time = NOW()
+          WHERE id = ?
+        `, [currentUserId, swapId]);
+
+        // Insert into matches table for convenience
         await pool.execute(`
           INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
           VALUES (?, ?, ?, ?, NOW())
@@ -1285,40 +1329,6 @@ exports.acceptSwap = async (req, res) => {
           currentUserId,
           "matched"
         ]);
-
-        console.log("Updating requester's swap...");
-        await pool.execute(`
-          UPDATE swaps
-          SET status = 'matched',
-              matched_user_id = ?
-          WHERE id = ?
-        `, [currentUserId, swapId]);
-
-        // --- NEW: Also match the ACCEPTER'S active swap if it exists and matches ---
-        console.log("Checking for a matching active swap for the accepter (User B)...");
-        const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
-        
-        // Find the BEST matching active swap for the current user
-        const [myMatchRows] = await pool.execute(`
-            SELECT id FROM swaps 
-            WHERE user_id = ? 
-              AND (status = 'active' OR status = 'open') 
-              AND type = ? 
-              AND amount = ? 
-            ORDER BY created_at ASC 
-            LIMIT 1
-        `, [currentUserId, oppositeType, swap.amount]);
-
-        if (myMatchRows.length > 0) {
-            const mySwapId = myMatchRows[0].id;
-            console.log(`Matching accepter's swap ${mySwapId} with requester's swap ${swapId}`);
-            await pool.execute(`
-                UPDATE swaps 
-                SET status = 'matched', 
-                    matched_user_id = ? 
-                WHERE id = ?
-            `, [swap.user_id, mySwapId]);
-        }
 
         console.log("Resetting notification state for user:", currentUserId);
         await pool.execute(

@@ -217,33 +217,48 @@ exports.resendOTP = async (req, res) => {
 };
 
 exports.forgotPassword = async (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-        return res.status(400).json({ success: false, message: 'Email is required.' });
-    }
-
     try {
+        console.log("Forgot password API hit");
+        const { email } = req.body;
+        console.log("Request email:", email);
+
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required.' });
+        }
+
         const [rows] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
         if (rows.length === 0) {
-            // For security, don't reveal if email exists or not
-            return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+            return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
         }
 
         const crypto = require('crypto');
         const token = crypto.randomBytes(32).toString('hex');
+        console.log("Generated token:", token);
         const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
         await pool.execute(
             'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
             [token, expiry, rows[0].id]
         );
+        console.log("Token saved in DB");
 
-        await emailService.sendResetPasswordEmail(email, token);
+        const result = await emailService.sendResetPasswordEmail(email, token);
 
-        return res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+        if (!result.success) {
+            console.error("FORGOT PASSWORD ERROR: Email delivery failed:", result.error || "Unknown Error");
+            return res.status(500).json({
+                message: "Internal error",
+                error: result.error || "Failed to send reset email"
+            });
+        }
+
+        return res.json({ message: "Reset email sent" });
     } catch (error) {
-        console.error('Forgot Password Error:', error);
-        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
+        console.error("FORGOT PASSWORD ERROR:", error);
+        return res.status(500).json({
+            message: "Internal error",
+            error: error.message
+        });
     }
 };
 

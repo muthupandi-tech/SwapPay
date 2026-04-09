@@ -86,6 +86,18 @@ function getEmailTemplateWrapper(title, content) {
 }
 
 /**
+ * DEVELOPMENT HELPER: Logs critical email content to the console
+ * Useful when SMTP settings are invalid.
+ */
+function logCriticalEmailToConsole(title, to, payload) {
+    console.log('\n' + '='.repeat(60));
+    console.log(`[DEVELOPMENT FALLBACK] ${title.toUpperCase()}`);
+    console.log(`TO: ${to}`);
+    console.log(`CONTENT: ${payload}`);
+    console.log('='.repeat(60) + '\n');
+}
+
+/**
  * 0. Swap Created Email Template
  */
 async function sendSwapCreatedEmail(toEmail, swapType, amount, location) {
@@ -140,9 +152,13 @@ async function sendOTPEmail(toEmail, otp) {
             <div style="font-size: 36px; letter-spacing: 12px; margin-bottom: 10px; font-weight: 800; color: #1e293b; font-family: monospace;">${otp}</div>
         </div>
         
+        
         <p style="color: #ef4444; font-weight: bold; text-align: center;">This OTP expires in exactly 5 minutes.</p>
         <p>If you did not attempt to register an account with us, please ignore this email safely.</p>
     `;
+
+    // DEV FALLBACK: Log OTP to console so developer can see it if email fails
+    logCriticalEmailToConsole("OTP Verification Code", toEmail, `YOUR OTP CODE IS: ${otp}`);
 
     const mailOptions = {
         from: `"SwapPay Verification" <${senderEmail}>`,
@@ -669,42 +685,58 @@ async function sendContactEmail(name, email, message) {
  * Reset Password Email Template
  */
 async function sendResetPasswordEmail(toEmail, token) {
-    if (!(await isEmailNotificationEnabled())) return;
     const t = await getTransporter();
 
-    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
+    // Mandatory configuration logs
+    console.log("EMAIL_USER:", process.env.EMAIL_USER);
+    console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
 
-    const content = `
-        <h3 style="color: #60a5fa; margin-top: 0;">Password Reset Requested</h3>
-        <p>We received a request to reset your password for your SwapPay account.</p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset My Password</a>
-        </div>
-        
-        <p>This link will expire in <strong>15 minutes</strong> for security reasons.</p>
-        <p>If you did not request this, you can safely ignore this email. Your password will remain unchanged.</p>
-        
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #94a3b8;">If the button doesn't work, copy and paste this link into your browser:</p>
-        <p style="font-size: 12px; color: #94a3b8; word-break: break-all;">${resetLink}</p>
-    `;
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
     const mailOptions = {
-        from: `"SwapPay Security" <${senderEmail}>`,
+        from: process.env.EMAIL_USER,
         to: toEmail,
-        subject: "SwapPay Password Reset Request",
-        html: getEmailTemplateWrapper("Reset Your Password", content)
+        subject: "Reset Your Password",
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>SwapPay Password Reset</h2>
+                <p>Click the link below to reset your password. This link will expire in 15 minutes.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${resetLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
+                </div>
+                <p>If you did not request this, you can safely ignore this email.</p>
+                <hr>
+                <p style="font-size: 12px; color: #666;">If the button above doesn't work, copy and paste this link into your browser:</p>
+                <p style="font-size: 12px; color: #666; word-break: break-all;">${resetLink}</p>
+            </div>
+        `
     };
 
+    // Mandatory force test email send as temporary diagnostic
+    console.log("Attempting mandatory force test email send...");
     try {
-        const info = await t.sendMail(mailOptions);
-        console.log(`Sent Reset Password Email to ${toEmail}`);
-        if (info.messageId && t.options.host === "smtp.ethereal.email") {
-            console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
-        }
+        await t.sendMail({
+            from: process.env.EMAIL_USER,
+            to: toEmail,
+            subject: "Test Email",
+            text: "Test success"
+        });
+        console.log("Force test email sent successfully");
+    } catch (testError) {
+        console.error("Force test email failed:", testError.message);
+    }
+
+    // DEV FALLBACK: Log link to console for debugging
+    logCriticalEmailToConsole("Password Reset Link", toEmail, resetLink);
+
+    try {
+        await t.sendMail(mailOptions);
+        console.log("Email sent successfully");
+        return { success: true, resetLink };
     } catch (error) {
-        console.error(`[CRITICAL] Failed to send reset password email to ${toEmail}:`, error);
+        console.error("Email sending failed:", error.message);
+        return { success: false, resetLink, error: error.message };
     }
 }
 

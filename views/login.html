@@ -157,24 +157,32 @@
                     body: JSON.stringify({ email, password })
                 });
 
-                const data = await response.json();
+                // Server can return plain text or JSON - handle both
+                const contentType = response.headers.get('content-type') || '';
+                let data = {};
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    data = { message: text, error: text };
+                }
 
                 if (response.ok && data.success) {
                     submitBtn.innerText = 'Success! Redirecting...';
                     window.location.href = data.redirect || '/dashboard';
                 } else {
-                    // Handle validation errors or auth errors
                     let errMsg = data.message || data.error || 'Invalid credentials.';
                     if (data.errors && Array.isArray(data.errors)) {
                         errMsg = data.errors.map(err => err.msg).join(' ');
                     }
-                    alertBox.innerText = errMsg;
+                    alertBox.innerHTML = errMsg;
                     alertBox.style.display = 'block';
                     submitBtn.innerText = 'Log In';
                     submitBtn.disabled = false;
                 }
             } catch (error) {
-                alertBox.innerText = 'Network error. Please check your connection.';
+                console.error('Login fetch error:', error);
+                alertBox.innerText = 'Unable to connect. Please check your connection or try again.';
                 alertBox.style.display = 'block';
                 submitBtn.innerText = 'Log In';
                 submitBtn.disabled = false;
