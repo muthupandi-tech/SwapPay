@@ -23,26 +23,40 @@ exports.createSwap = async (req, res) => {
         const isPartialAllowed = req.body.allow_partial_match === true || req.body.allow_partial_match === 'true';
         const isPartnerSelection = req.body.allow_partner_selection === true || req.body.allow_partner_selection === 'true';
         const isAutoAcceptPerfect = req.body.auto_accept_perfect !== false && req.body.auto_accept_perfect !== 'false';
+        
+        // --- NEW: Hybrid Matching Fields ---
+        const autoMatch = req.body.auto_match !== false && req.body.auto_match !== 'false';
+        const maxApplicants = parseInt(req.body.max_applicants) || 5;
+
         const parsedAmount = parseFloat(amount);
 
-        // --- NEW: Respect User's auto_match preference and fetch location ---
+        // --- Respect User's auto_match preference and fetch location ---
         const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
-        const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
         const userLat = userRows.length > 0 ? userRows[0].latitude : null;
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
 
         // 1. Insert the PARENT swap request initially
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial, auto_match, max_applicants) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed, autoMatch, maxApplicants]);
         const newParentSwapId = result.insertId;
 
-        if (!userAutoMatch) {
-            console.log(`Auto-match disabled for user ${userId}. Skipping matching logic.`);
+        // If Manual Match is chosen (autoMatch = false), skip instant matching
+        if (!autoMatch) {
             return res.status(201).json({
                 success: true,
-                message: 'Swap request created successfully. (Auto-matching is disabled per your profile setting)',
-                swapId: newParentSwapId,
-                isAutoMatched: false
+                message: 'Swap created in Manual Mode. Wait for applicants!',
+                swapId: newParentSwapId
+            });
+        }
+
+        // --- OLDER Auto-match preference check (profile wide) ---
+        const profileAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
+        if (!profileAutoMatch) {
+            console.log(`Auto-match disabled globally for user ${userId}. Skipping matching logic.`);
+            return res.status(201).json({
+                success: true,
+                message: 'Swap request created. Global auto-match is OFF.',
+                swapId: newParentSwapId
             });
         }
 
@@ -1089,11 +1103,18 @@ exports.getSwapFeed = async (req, res) => {
               s.is_edited,
               s.location,
               s.created_at,
+              s.auto_match,
+              s.max_applicants,
+              s.applicants_count,
+              (SELECT COUNT(*) FROM swap_applicants sa WHERE sa.swap_id = s.id AND sa.user_id = ?) as userHasApplied,
               (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
             FROM swaps s
             JOIN users u ON s.user_id = u.id
             WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open') AND s.user_id != ?
         `;
+
+        queryParams.push(userId); // For userHasApplied subquery
+        queryParams.push(userId); // For WHERE s.user_id != ?
 
         if (minAmount) {
             query += " AND s.remaining_amount >= ?";
@@ -1493,5 +1514,97 @@ exports.updateSwap = async (req, res) => {
     } catch (error) {
         console.error('Update Swap Error:', error);
         res.status(500).json({ success: false, error: 'An error occurred while updating the swap.' });
+    }
+};
+// Apply for a swap (Interest-based flow)
+exports.applyForSwap = async (req, res) => {
+    const userId = req.session.userId;
+    const { swapId } = req.body;
+
+    if (!userId || !swapId) return res.status(400).json({ error: 'Missing data' });
+
+    try {
+        const [sRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        if (sRows.length === 0) return res.status(404).json({ error: 'Swap not found' });
+
+        const swap = sRows[0];
+        if (swap.auto_match) return res.status(400).json({ error: 'This swap uses auto-match. Use Accept instead.' });
+        if (swap.applicants_count >= swap.max_applicants) return res.status(400).json({ error: 'Maximum applicants reached' });
+
+        const [check] = await pool.execute('SELECT id FROM swap_applicants WHERE swap_id = ? AND user_id = ?', [swapId, userId]);
+        if (check.length > 0) return res.status(400).json({ error: 'Already applied' });
+
+        await pool.execute('INSERT INTO swap_applicants (swap_id, user_id) VALUES (?, ?)', [swapId, userId]);
+        await pool.execute('UPDATE swaps SET applicants_count = applicants_count + 1 WHERE id = ?', [swapId]);
+
+        // Notify owner
+        const msg = "Someone is interested in your swap!";
+        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.user_id, 'New Applicant', msg, 'info']);
+
+        res.status(200).json({ success: true, message: 'Interest recorded!' });
+    } catch (error) {
+        console.error('Apply Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Get applicants for a swap
+exports.getApplicants = async (req, res) => {
+    const userId = req.session.userId;
+    const { id } = req.params;
+
+    try {
+        const [sRows] = await pool.execute('SELECT user_id FROM swaps WHERE id = ?', [id]);
+        if (sRows.length === 0 || sRows[0].user_id !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+        const query = `
+            SELECT sa.user_id, u.name, sa.created_at,
+            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore,
+            u.latitude, u.longitude
+            FROM swap_applicants sa
+            JOIN users u ON sa.user_id = u.id
+            WHERE sa.swap_id = ?
+        `;
+        const [applicants] = await pool.execute(query, [id]);
+        res.status(200).json({ success: true, applicants });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Select an applicant
+exports.selectApplicant = async (req, res) => {
+    const userId = req.session.userId;
+    const { id } = req.params;
+    const { applicantId } = req.body;
+
+    try {
+        const [sRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [id]);
+        if (sRows.length === 0 || sRows[0].user_id !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+        const swap = sRows[0];
+
+        // 1. Mark swap as matched with this user
+        await pool.execute('UPDATE swaps SET status = "matched", matched_user_id = ?, match_time = NOW() WHERE id = ?', [applicantId, id]);
+
+        // 2. Notify Winner
+        const winMsg = "You have been selected for a swap! 🎉";
+        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [applicantId, 'Selected!', winMsg, 'match']);
+
+        // 3. Notify Losers
+        const loseMsg = "This swap has been taken by another user.";
+        await pool.execute(`
+            INSERT INTO notifications (user_id, title, message, type)
+            SELECT user_id, 'Swap Unavailable', ?, 'info'
+            FROM swap_applicants 
+            WHERE swap_id = ? AND user_id != ?
+        `, [loseMsg, id, applicantId]);
+
+        // 4. Create Match entry
+        await pool.execute('INSERT INTO matches (swap_id, requester_id, accepter_id, status) VALUES (?, ?, ?, ?)', [id, userId, applicantId, 'matched']);
+
+        res.status(200).json({ success: true, message: 'Applicant selected!' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 };

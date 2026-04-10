@@ -1072,12 +1072,30 @@
                             style="width: 20px; height: 20px; accent-color: var(--accent-secondary);">
                         <label for="autoAcceptPerfect" style="margin: 0;">Auto-Accept Perfect Match</label>
                     </div>
-                </div>
                 <div class="form-group">
                     <label for="location">Meeting Location</label>
                     <input type="text" id="location" class="form-control" required placeholder="e.g. Library, Canteen">
                 </div>
-                <button type="submit" id="submitBtn" class="btn-submit">Create Request</button>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                            <input type="checkbox" id="autoMatchToggle" checked style="width: 18px; height: 18px; accent-color: var(--accent-secondary);">
+                            Auto-Match (Instant)
+                        </label>
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 1.8rem; margin-top: 0.2rem;">
+                            OFF: Manually pick from interested applicants (Interest-based flow).
+                        </p>
+                    </div>
+
+                    <div id="maxApplicantsContainer" class="form-group" style="margin-bottom: 1.5rem; display: none;">
+                        <label class="form-label">Max Applicants: <span id="maxApplicantsValue" style="color: var(--accent-secondary); font-weight: bold;">5</span></label>
+                        <input type="range" id="maxApplicantsInput" min="3" max="10" value="5" style="width: 100%; accent-color: var(--accent-secondary);" oninput="document.getElementById('maxApplicantsValue').innerText = this.value">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            <span>3</span>
+                            <span>10</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="createSwapBtn">Post Swap Request</button>
             </form>
         </div>
     </div>
@@ -1213,6 +1231,24 @@
                 <div style="display: flex; flex-direction: column; gap: 0.8rem;">
                     <button class="btn-submit" onclick="confirmMerge('continue')" style="background: var(--accent-secondary); color: black;">Deduct from Existing Swap</button>
                     <button class="btn-submit" onclick="confirmMerge('new')" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-primary);">Create New Independent Swap</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Applicants Modal -->
+    <div class="modal-overlay" id="applicantsModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Interested <span>Applicants</span></h2>
+                <button class="btn-close" onclick="closeApplicantsModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Select the best candidate based on their trust score and reputation.
+                </p>
+                <div id="applicantsList" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Applicants injected here -->
                 </div>
             </div>
         </div>
@@ -1434,12 +1470,14 @@
             btn.textContent = 'Creating...';
 
             const payload = {
-                type: swapTypeInput.value,
+                type: document.getElementById('swapType').value,
                 amount: document.getElementById('amount').value,
                 location: document.getElementById('location').value,
                 allow_partial_match: document.getElementById('allowPartial').checked,
                 allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
                 auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked,
+                auto_match: document.getElementById('autoMatchToggle').checked,
+                max_applicants: document.getElementById('maxApplicantsInput').value
             };
 
             try {
@@ -1652,9 +1690,19 @@
             if (isMyContext) {
                 // My Swap Context
                 if (swap.status === 'active' || swap.status === 'open') {
+                    const applicantCount = swap.applicants_count || 0;
+                    const maxCount = swap.max_applicants || 5;
+                    const isManual = !swap.auto_match;
+                    const manualBadge = isManual ? `<div style="font-size: 0.75rem; color: #ff9f43; font-weight: bold; margin-bottom: 5px;">Manual Selection Flow (${applicantCount}/${maxCount})</div>` : '';
+
                     actionArea = `
+                        ${manualBadge}
                         <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Bidirectional Matching Available</div>
-                        <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
+                        ${isManual ? `
+                            <button class="btn-accept-swap" onclick="openApplicantsModal(${swap.id})" style="margin-top: 1rem; background: var(--accent-secondary); color: black;">View Applicants (${applicantCount})</button>
+                        ` : `
+                            <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
+                        `}
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                             <button class="btn-accept-swap" onclick="editSwap(${swap.id}, ${swap.amount}, '${swap.location}', '${swap.type}')" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-primary); color: var(--accent-primary);">Edit</button>
                             <button class="btn-accept-swap" onclick="deleteSwap(${swap.id})" style="flex: 1; background: rgba(255, 107, 107, 0.1); border: 1px solid #ff6b6b; color: #ff6b6b;">Delete</button>
@@ -2120,13 +2168,28 @@
                     const formattedScore = swap.trustScore ? parseFloat(swap.trustScore).toFixed(1) : "0.0";
                     const trustBadge = getTrustBadgeHTML(swap.trustScore);
 
+                    const isManual = !swap.auto_match;
+                    const full = swap.applicants_count >= swap.max_applicants;
+                    const alreadyApplied = swap.userHasApplied > 0;
+
+                    let actionBtn = '';
+                    if (!isManual) {
+                        actionBtn = `<button class="accept-btn btn-accept-swap" data-id="${swap.id}" style="width: 100%;">Accept Swap</button>`;
+                    } else if (alreadyApplied) {
+                        actionBtn = `<button class="btn-accept-swap btn-disabled" style="width: 100%; background: #2ecc71; color: white;">✓ Applied</button>`;
+                    } else if (full) {
+                        actionBtn = `<button class="btn-accept-swap btn-disabled" style="width: 100%; background: #64748b;">Maximum Applicants Reached</button>`;
+                    } else {
+                        actionBtn = `<button class="interest-btn btn-accept-swap" data-id="${swap.id}" style="width: 100%; background: var(--accent-secondary); color: black;">I'm Interested</button>`;
+                    }
+
                     card.innerHTML = `
                       ${bestMatchBadge}
                       <div class="swap-user" style="font-weight: bold; color: var(--text-primary); margin-bottom: 5px; display: flex; align-items: center;">
                           ${swap.name} ${trustBadge}
                       </div>
                       <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
-                          ⭐ ${formattedScore} Trust Score
+                          ⭐ ${formattedScore} Trust Score ${isManual ? ` • <span style="color: var(--accent-secondary)">${swap.applicants_count}/${swap.max_applicants} Applicants</span>` : ''}
                       </div>
                       ${swap.distance ? `<div style="font-size: 0.9rem; color: ${swap.distance.includes('unavailable') ? '#f59e0b' : '#00cec9'}; margin-bottom: 5px; font-weight: bold;">${swap.distance.includes('unavailable') ? '⚠️' : '📍'} ${swap.distance}${swap.distance.includes('unavailable') ? '' : ' away'}</div>` : ''}
                       <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${swap.amount}</div>
@@ -2139,9 +2202,7 @@
                         <span>Location:</span> <strong style="color: var(--text-primary);">${swap.location}</strong>
                       </div>
 
-                      <button class="accept-btn btn-accept-swap" data-id="${swap.id}" style="width: 100%;">
-                        Accept Swap
-                      </button>
+                      ${actionBtn}
                     `;
 
                     container.appendChild(card);
@@ -2152,28 +2213,109 @@
             }
         }
 
-        window.expandSearchRange = async function() {
-            try {
-                const res = await fetch('/api/user/settings');
-                if (res.ok) {
-                    const data = await res.json();
-                    let updatedSettings = data.settings;
-                    updatedSettings.search_radius = 750;
-
-                    await fetch('/api/user/settings', {
+        // --- Interest Button Handler ---
+        document.addEventListener("click", async (e) => {
+            if (e.target.classList.contains("interest-btn")) {
+                const swapId = e.target.dataset.id;
+                const btn = e.target;
+                
+                try {
+                    btn.disabled = true;
+                    btn.textContent = 'Processing...';
+                    
+                    const response = await fetch('/api/swaps/apply', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(updatedSettings)
+                        body: JSON.stringify({ swapId })
                     });
                     
-                    showToast('Range expanded to 750m', '📍');
-                    loadSwapFeed();
+                    const data = await response.json();
+                    if (data.success) {
+                        showToast('Interest recorded!', '✅');
+                        loadSwapFeed();
+                    } else {
+                        alert(data.error || 'Failed to apply');
+                        btn.disabled = false;
+                        btn.textContent = "I'm Interested";
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Network error');
+                    btn.disabled = false;
+                    btn.textContent = "I'm Interested";
+                }
+            }
+        });
+
+        // --- Applicant Management ---
+        window.openApplicantsModal = async function(swapId) {
+            const modal = document.getElementById('applicantsModal');
+            const list = document.getElementById('applicantsList');
+            modal.classList.add('active');
+            list.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Loading applicants...</p>';
+
+            try {
+                const response = await fetch(`/api/swaps/applicants/${swapId}`);
+                const data = await response.json();
+                
+                if (data.success && data.applicants.length > 0) {
+                    list.innerHTML = data.applicants.map(app => `
+                        <div class="stat-card" style="padding: 1rem; border: 1px solid var(--glass-border); margin: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.8rem;">
+                                <div>
+                                    <div style="font-weight: bold; color: var(--text-primary); font-size: 1.1rem;">${app.name}</div>
+                                    <div style="color: var(--accent-secondary); font-size: 0.85rem;">★ ${parseFloat(app.trustScore || 0).toFixed(1)} Trust Score</div>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary);">${formatRelativeDate(app.created_at)}</div>
+                            </div>
+                            <button class="btn-primary" onclick="selectApplicant(${swapId}, ${app.user_id})" style="width: 100%; font-size: 0.9rem; padding: 0.6rem;">Select as Partner</button>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">No applicants yet.</p>';
                 }
             } catch (err) {
                 console.error(err);
-                alert('Failed to expand range.');
+                list.innerHTML = '<p style="color: #ff6b6b; text-align: center;">Failed to load.</p>';
             }
         };
+
+        window.closeApplicantsModal = function() {
+            document.getElementById('applicantsModal').classList.remove('active');
+        };
+
+        window.selectApplicant = async function(swapId, applicantId) {
+            if (!confirm("Are you sure you want to select this partner?")) return;
+            
+            try {
+                const response = await fetch(`/api/swaps/select-applicant/${swapId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ applicantId })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Partner selected!', '🎉');
+                    closeApplicantsModal();
+                    loadAllData();
+                } else {
+                    alert(data.error || 'Selection failed');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network error');
+            }
+        };
+
+        // UI Controls for Creation Modal
+        const autoMatchToggle = document.getElementById('autoMatchToggle');
+        const maxApplicantsContainer = document.getElementById('maxApplicantsContainer');
+        if (autoMatchToggle) {
+            autoMatchToggle.addEventListener('change', () => {
+                maxApplicantsContainer.style.display = autoMatchToggle.checked ? 'none' : 'block';
+            });
+        }
 
         // Merging Choice State
         let pendingAcceptSwapId = null;

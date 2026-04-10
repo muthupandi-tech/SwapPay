@@ -22,6 +22,8 @@ router.post('/createSwap', swapController.createSwap);
 router.post('/completeSwap/:id', swapController.completeSwap);
 router.post('/rateSwap/:id', swapController.rateSwap);
 router.post('/accept', swapController.acceptSwap);
+router.post('/apply', swapController.applyForSwap);
+router.post('/select-applicant/:id', swapController.selectApplicant);
 
 // GET requests
 router.get('/nearby', swapController.getNearbySwaps);
@@ -30,6 +32,7 @@ router.get('/active', swapController.getActiveSwaps);
 router.get('/matched', swapController.getMatchedSwaps);
 router.get('/completed', swapController.getCompletedSwaps);
 router.get('/feed', swapController.getSwapFeed);
+router.get('/applicants/:id', swapController.getApplicants);
 router.get('/notifications', swapController.getNotifications);
 router.post('/notifications/read/:id', swapController.markNotificationRead);
 
