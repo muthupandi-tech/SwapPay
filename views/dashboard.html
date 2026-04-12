@@ -1463,24 +1463,32 @@
         }
 
         // Handle Swap Creation
-        swapForm.addEventListener('submit', async (e) => {
+        document.querySelector("#swapForm").addEventListener("submit", async (e) => {
             e.preventDefault();
-            const btn = document.getElementById('submitBtn');
-            btn.disabled = true;
-            btn.textContent = 'Creating...';
 
-            const payload = {
-                type: document.getElementById('swapType').value,
-                amount: document.getElementById('amount').value,
-                location: document.getElementById('location').value,
-                allow_partial_match: document.getElementById('allowPartial').checked,
-                allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
-                auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked,
-                auto_match: document.getElementById('autoMatchToggle').checked,
-                max_applicants: document.getElementById('maxApplicantsInput').value
-            };
+            const button = e.target.querySelector("button[type='submit']");
+
+            if (!button) {
+                console.error("Submit button not found");
+                return;
+            }
+
+            button.disabled = true;
 
             try {
+                console.log("Submitting swap request...");
+
+                const payload = {
+                    type: document.getElementById('swapType').value,
+                    amount: document.getElementById('amount').value,
+                    location: document.getElementById('location').value,
+                    allow_partial_match: document.getElementById('allowPartial').checked,
+                    allow_partner_selection: document.getElementById('allowPartnerSelection').checked,
+                    auto_accept_perfect: document.getElementById('autoAcceptPerfect').checked,
+                    auto_match: document.getElementById('autoMatchToggle').checked,
+                    max_applicants: document.getElementById('maxApplicantsInput').value
+                };
+
                 const response = await fetch('/api/swaps/createSwap', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1496,11 +1504,10 @@
                     alert(data.error || 'Failed to create swap.');
                 }
             } catch (err) {
-                console.error(err);
+                console.error("Error submitting swap:", err);
                 alert('An error occurred.');
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Create Request';
+                button.disabled = false;
             }
         });
 
@@ -1699,7 +1706,7 @@
                         ${manualBadge}
                         <div class="status-text warning" style="color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">Bidirectional Matching Available</div>
                         ${isManual ? `
-                            <button class="btn-accept-swap" onclick="openApplicantsModal(${swap.id})" style="margin-top: 1rem; background: var(--accent-secondary); color: black;">View Applicants (${applicantCount})</button>
+                            <button class="btn-accept-swap view-applicants-btn" data-id="${swap.id}" style="margin-top: 1rem; background: var(--accent-secondary); color: black;">View Applicants (${applicantCount})</button>
                         ` : `
                             <button class="btn-accept-swap" onclick="openPartnerSelection(${swap.id}, ${swap.remaining_amount || swap.amount}, '${swap.type}')" style="margin-top: 1rem;">View Available Partners</button>
                         `}
@@ -2248,40 +2255,81 @@
         });
 
         // --- Applicant Management ---
-        window.openApplicantsModal = async function(swapId) {
-            const modal = document.getElementById('applicantsModal');
-            const list = document.getElementById('applicantsList');
-            modal.classList.add('active');
-            list.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Loading applicants...</p>';
+        // Click handler for View Applicants (Using closest for robust delegation)
+        document.addEventListener("click", function (e) {
+            const btn = e.target.closest(".view-applicants-btn");
+            if (!btn) return;
 
-            try {
-                const response = await fetch(`/api/swaps/applicants/${swapId}`);
-                const data = await response.json();
-                
-                if (data.success && data.applicants.length > 0) {
-                    list.innerHTML = data.applicants.map(app => `
-                        <div class="stat-card" style="padding: 1rem; border: 1px solid var(--glass-border); margin: 0;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.8rem;">
-                                <div>
-                                    <div style="font-weight: bold; color: var(--text-primary); font-size: 1.1rem;">${app.name}</div>
-                                    <div style="color: var(--accent-secondary); font-size: 0.85rem;">★ ${parseFloat(app.trustScore || 0).toFixed(1)} Trust Score</div>
-                                </div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);">${formatRelativeDate(app.created_at)}</div>
-                            </div>
-                            <button class="btn-primary" onclick="selectApplicant(${swapId}, ${app.user_id})" style="width: 100%; font-size: 0.9rem; padding: 0.6rem;">Select as Partner</button>
-                        </div>
-                    `).join('');
-                } else {
-                    list.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">No applicants yet.</p>';
-                }
-            } catch (err) {
-                console.error(err);
-                list.innerHTML = '<p style="color: #ff6b6b; text-align: center;">Failed to load.</p>';
+            const swapId = btn.dataset.id;
+            if (!swapId) {
+                console.error("Swap ID missing");
+                return;
             }
-        };
+
+            console.log("Fetching applicants for swap:", swapId);
+            fetch(`/api/swaps/applicants/${swapId}`)
+                .then(res => res.json())
+                .then(data => {
+                    console.log("Applicants fetched:", data);
+                    renderApplicants(data, swapId); 
+                })
+                .catch(err => console.error("Error fetching applicants:", err));
+        });
+
+        function renderApplicants(data, swapId) {
+            const container = document.getElementById("applicantsList");
+
+            if (!container) {
+                console.error("Applicants container not found");
+                return;
+            }
+
+            container.innerHTML = "";
+            
+            // Adjust for potential wrapper object {success: true, applicants: [...]}
+            const applicants = Array.isArray(data) ? data : (data.applicants || []);
+
+            if (!applicants || applicants.length === 0) {
+                container.innerHTML = "<p style='text-align:center; padding: 1rem;'>No applicants yet</p>";
+                openApplicantsModal();
+                return;
+            }
+
+            applicants.forEach(user => {
+                const div = document.createElement("div");
+                div.className = "stat-card";
+                div.style.padding = "1rem";
+                div.style.marginBottom = "10px";
+                div.style.border = "1px solid var(--glass-border)";
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <p style="font-weight: bold; margin:0;">${user.name || "User"}</p>
+                            <span style="font-size: 0.8rem; color: var(--accent-secondary);">★ ${parseFloat(user.trustScore || 0).toFixed(1)} Trust Score</span>
+                        </div>
+                        <button class="btn-primary" onclick="selectApplicant(${swapId}, ${user.user_id})" style="width: auto; padding: 0.5rem 1rem; font-size: 0.85rem;">Select</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            openApplicantsModal();
+        }
+
+        function openApplicantsModal() {
+            const modal = document.getElementById("applicantsModal");
+            if (modal) {
+                modal.style.display = "block";
+                modal.classList.add("active"); // Keep class for active animations if any
+            }
+        }
 
         window.closeApplicantsModal = function() {
-            document.getElementById('applicantsModal').classList.remove('active');
+            const modal = document.getElementById('applicantsModal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+            }
         };
 
         window.selectApplicant = async function(swapId, applicantId) {
