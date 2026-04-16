@@ -4,8 +4,11 @@
     --bg-color: #0b0d17;
     --text-primary: #ffffff;
     --text-secondary: #94a3b8;
-    --accent-primary: #4f46e5; /* Indigo */
-    --accent-secondary: #3b82f6; /* Blue */
+    --accent-primary: #4f46e5;
+    /* Indigo */
+    --accent-secondary: #3b82f6;
+    /* Blue */
+    --nav-text: var(--accent-secondary);
     --glass-bg: rgba(30, 41, 59, 0.4);
     --glass-border: rgba(255, 255, 255, 0.1);
 }
@@ -24,7 +27,11 @@ body {
     min-height: 100vh;
 }
 
-h1, h2, h3, h4, .logo {
+h1,
+h2,
+h3,
+h4,
+.logo {
     font-family: 'Poppins', sans-serif;
 }
 
@@ -84,7 +91,9 @@ h1, h2, h3, h4, .logo {
 }
 
 /* Ensure icons are consistent */
-.guide-nav-icon, .bell-icon, .profile-avatar {
+.guide-nav-icon,
+.bell-icon,
+.profile-avatar {
     width: 24px !important;
     height: 24px !important;
     font-size: 1.2rem !important;
@@ -95,7 +104,8 @@ h1, h2, h3, h4, .logo {
 }
 
 .profile-avatar {
-    width: 32px !important; /* Slightly larger for avatar */
+    width: 32px !important;
+    /* Slightly larger for avatar */
     height: 32px !important;
     border-radius: 50%;
 }
@@ -119,7 +129,7 @@ h1, h2, h3, h4, .logo {
 
 .nav-links a {
     text-decoration: none;
-    color: var(--text-secondary);
+    color: var(--nav-text);
     font-weight: 600;
     transition: color 0.3s;
 }
@@ -213,7 +223,8 @@ h1, h2, h3, h4, .logo {
     outline: none;
 }
 
-.btn-primary, .btn-submit {
+.btn-primary,
+.btn-submit {
     background: linear-gradient(135deg, var(--accent-primary), #8e7dfa);
     color: white;
     box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
@@ -234,7 +245,9 @@ h1, h2, h3, h4, .logo {
     color: var(--text-primary);
 }
 
-.btn-primary:hover, .btn-submit:hover, .btn-premium:hover {
+.btn-primary:hover,
+.btn-submit:hover,
+.btn-premium:hover {
     transform: translateY(-3px) scale(1.02);
     box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
     filter: brightness(1.1);
@@ -257,11 +270,16 @@ h1, h2, h3, h4, .logo {
     border-color: rgba(255, 255, 255, 0.5);
 }
 
-.btn-primary:active, .btn-submit:active, .btn-premium:active, .btn-glass:active {
+.btn-primary:active,
+.btn-submit:active,
+.btn-premium:active,
+.btn-glass:active {
     transform: translateY(0) scale(0.98);
 }
 
-.btn-primary:disabled, .btn-submit:disabled, .btn-premium:disabled {
+.btn-primary:disabled,
+.btn-submit:disabled,
+.btn-premium:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none !important;
@@ -451,11 +469,25 @@ h1, h2, h3, h4, .logo {
 }
 
 @keyframes bellShake {
-    0% { transform: rotate(0); }
-    25% { transform: rotate(15deg); }
-    50% { transform: rotate(-10deg); }
-    75% { transform: rotate(10deg); }
-    100% { transform: rotate(0); }
+    0% {
+        transform: rotate(0);
+    }
+
+    25% {
+        transform: rotate(15deg);
+    }
+
+    50% {
+        transform: rotate(-10deg);
+    }
+
+    75% {
+        transform: rotate(10deg);
+    }
+
+    100% {
+        transform: rotate(0);
+    }
 }
 
 /* Features Section */
@@ -513,7 +545,7 @@ h1, h2, h3, h4, .logo {
     border: 1px solid var(--glass-border);
     border-radius: 24px;
     padding: 4rem;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .about-image {
@@ -567,7 +599,7 @@ h1, h2, h3, h4, .logo {
 }
 
 .about-badge {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     padding: 0.5rem 1rem;
     border-radius: 50px;
@@ -608,14 +640,16 @@ h1, h2, h3, h4, .logo {
     gap: 1rem;
 }
 
-.about-actions .btn-primary, .about-actions .btn-secondary {
+.about-actions .btn-primary,
+.about-actions .btn-secondary {
     padding: 0.8rem 1.8rem;
     font-size: 1rem;
 }
 
-#contactForm input:focus, #contactForm textarea:focus {
+#contactForm input:focus,
+#contactForm textarea:focus {
     border-color: var(--accent-primary) !important;
-    background: rgba(255,255,255,0.08) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
 }
 
 .status-success {
@@ -626,9 +660,10 @@ h1, h2, h3, h4, .logo {
     color: #ef4444;
 }
 
-#contactForm input:focus, #contactForm textarea:focus {
+#contactForm input:focus,
+#contactForm textarea:focus {
     border-color: var(--accent-primary) !important;
-    background: rgba(255,255,255,0.08) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
 }
 
 .status-success {
@@ -835,8 +870,10 @@ h1, h2, h3, h4, .logo {
         right: 0px;
         height: 100vh;
         top: 0px;
-        background-color: #0f1322; /* Solid dark background for mobile menu */
-        display: flex !important; /* Force display when active */
+        background-color: #0f1322;
+        /* Solid dark background for mobile menu */
+        display: flex !important;
+        /* Force display when active */
         flex-direction: column;
         align-items: center;
         width: 70%;
@@ -852,7 +889,7 @@ h1, h2, h3, h4, .logo {
         transform: translateX(0%);
     }
 
-    .navbar-right > div {
+    .navbar-right>div {
         width: 100%;
         text-align: center;
     }
@@ -882,14 +919,17 @@ h1, h2, h3, h4, .logo {
     .toggle .line1 {
         transform: rotate(-45deg) translate(-5px, 6px);
     }
+
     .toggle .line2 {
         opacity: 0;
     }
+
     .toggle .line3 {
         transform: rotate(45deg) translate(-5px, -6px);
     }
 
-    .how-it-works, .features-section {
+    .how-it-works,
+    .features-section {
         padding: 4rem 5%;
     }
 
@@ -903,23 +943,23 @@ h1, h2, h3, h4, .logo {
         padding: 3rem 2rem;
         gap: 2.5rem;
     }
-    
+
     .about-image {
         flex: 1;
         width: 100%;
         max-width: 300px;
         margin: 0 auto;
     }
-    
+
     .about-badges {
         justify-content: center;
     }
-    
+
     .about-actions {
         justify-content: center;
         flex-wrap: wrap;
     }
-    
+
     .about-quote {
         text-align: left;
     }
@@ -929,8 +969,9 @@ h1, h2, h3, h4, .logo {
     .section-header h2 {
         font-size: 2rem;
     }
-    
-    .step-card, .feature-card {
+
+    .step-card,
+    .feature-card {
         padding: 2rem 1.5rem;
     }
 }
@@ -943,7 +984,8 @@ h1, h2, h3, h4, .logo {
 }
 
 .password-group .form-control {
-    padding-right: 3rem !important; /* Space for the toggle icon */
+    padding-right: 3rem !important;
+    /* Space for the toggle icon */
 }
 
 .toggle-password-btn {
@@ -963,7 +1005,8 @@ h1, h2, h3, h4, .logo {
     user-select: none;
     padding: 0;
     z-index: 10;
-    height: 100%; /* Ensure it's centered relative to the whole height */
+    height: 100%;
+    /* Ensure it's centered relative to the whole height */
 }
 
 .toggle-password-btn:hover {
@@ -984,6 +1027,17 @@ h1, h2, h3, h4, .logo {
     min-height: 1.2rem;
 }
 
-.strength-weak { color: #ef4444; font-weight: 700; }
-.strength-medium { color: #f59e0b; font-weight: 700; }
-.strength-strong { color: #10b981; font-weight: 700; }
+.strength-weak {
+    color: #ef4444;
+    font-weight: 700;
+}
+
+.strength-medium {
+    color: #f59e0b;
+    font-weight: 700;
+}
+
+.strength-strong {
+    color: #10b981;
+    font-weight: 700;
+}

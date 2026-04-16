@@ -212,62 +212,62 @@ app.get('/', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/login', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'login.html'));
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 app.get('/register', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'register.html'));
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
 app.get('/verify-otp', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'verify-otp.html'));
+    res.sendFile(path.join(__dirname, 'public', 'verify-otp.html'));
 });
 
 app.get('/forgot-password', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'forgot-password.html'));
+    res.sendFile(path.join(__dirname, 'public', 'forgot-password.html'));
 });
 
 app.get('/reset-password', (req, res) => {
     if (req.session && req.session.userId) {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'reset-password.html'));
+    res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
 });
 
 // Protected Route for Dashboard
 app.get('/dashboard', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 // Protected Route for Profile
 app.get('/profile', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'profile.html'));
+    res.sendFile(path.join(__dirname, 'public', 'profile.html'));
 });
 
 // Protected Route for Settings
 app.get('/settings', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'settings.html'));
+    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
 // Protected Route for Security Settings
 app.get('/settings/security', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'settings-security.html'));
+    res.sendFile(path.join(__dirname, 'public', 'settings-security.html'));
 });
 
 // Protected Route for Admin Dashboard
@@ -275,7 +275,7 @@ app.get('/admin', requireLogin, (req, res) => {
     if (req.session.role !== 'admin') {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'admin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // Admin Feedback Page
@@ -283,12 +283,12 @@ app.get('/admin/feedbacks', requireLogin, (req, res) => {
     if (req.session.role !== 'admin') {
         return res.redirect('/dashboard');
     }
-    res.sendFile(path.join(__dirname, 'views', 'admin-feedback.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin-feedback.html'));
 });
 
 // Support & Feedback Route
 app.get('/support', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'support.html'));
+    res.sendFile(path.join(__dirname, 'public', 'support.html'));
 });
 
 // API Routes mounting
