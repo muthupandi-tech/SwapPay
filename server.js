@@ -183,16 +183,17 @@ app.use('/api/admin', requireAdminAPI, adminRoutes);
 
 // Database connection simulation (configure with your credentials)
 const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
+    host: process.env.MYSQLHOST,
+    user: process.env.MYSQLUSER,
+    password: process.env.MYSQLPASSWORD,
+    database: process.env.MYSQLDATABASE,
+    port: process.env.MYSQLPORT,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
 });
 
+console.log("DB HOST:", process.env.MYSQLHOST);
 
 // Middleware to check if user is logged in
 const requireLogin = (req, res, next) => {
