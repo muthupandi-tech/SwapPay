@@ -205,7 +205,7 @@ const pool = mysql.createPool({
 
     connectTimeout: 10000
 });
-console.log("DB HOST:", process.env.MYSQLHOST);
+console.log("DB HOST:", process.env.DB_HOST);
 
 // Middleware to check if user is logged in
 const requireLogin = (req, res, next) => {
