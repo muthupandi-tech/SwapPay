@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const mysql = require('mysql2');
+const { Pool } = require('pg');
 const path = require('path');
 const session = require('express-session');
 const authRoutes = require('./routes/authRoutes');
@@ -182,30 +182,12 @@ const requireAdminAPI = (req, res, next) => {
 app.use('/api/admin', requireAdminAPI, adminRoutes);
 
 // Database connection simulation (configure with your credentials)
-/*const pool = mysql.createPool({
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: process.env.MYSQLPORT,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});*/
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    },
-
-    connectTimeout: 10000
+    }
 });
-console.log("DB HOST:", process.env.DB_HOST);
 
 // Middleware to check if user is logged in
 const requireLogin = (req, res, next) => {
@@ -319,17 +301,21 @@ server.listen(PORT, () => {
     startCronService();
 });
 
-// Initialize matches table using MySQL
-pool.query(`
-  CREATE TABLE IF NOT EXISTS matches (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    swap_id INT,
-    requester_id INT,
-    accepter_id INT,
-    status VARCHAR(50),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`, (err) => {
-    if (err) console.error("Error creating matches table:", err);
-    else console.log("Matches table verified.");
-});
+// Initialize matches table using PostgreSQL
+(async () => {
+    try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS matches (
+            id SERIAL PRIMARY KEY,
+            swap_id INT,
+            requester_id INT,
+            accepter_id INT,
+            status VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log("Matches table verified.");
+    } catch (err) {
+        console.error("Error creating matches table:", err);
+    }
+})();
