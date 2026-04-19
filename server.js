@@ -198,9 +198,13 @@ const pool = mysql.createPool({
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
     port: process.env.DB_PORT,
+
+    ssl: {
+        rejectUnauthorized: false
+    },
+
     connectTimeout: 10000
 });
-
 console.log("DB HOST:", process.env.MYSQLHOST);
 
 // Middleware to check if user is logged in
