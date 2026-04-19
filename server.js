@@ -182,7 +182,7 @@ const requireAdminAPI = (req, res, next) => {
 app.use('/api/admin', requireAdminAPI, adminRoutes);
 
 // Database connection simulation (configure with your credentials)
-const pool = mysql.createPool({
+/*const pool = mysql.createPool({
     host: process.env.MYSQLHOST,
     user: process.env.MYSQLUSER,
     password: process.env.MYSQLPASSWORD,
@@ -191,6 +191,14 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
+});*/
+const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT,
+    connectTimeout: 10000
 });
 
 console.log("DB HOST:", process.env.MYSQLHOST);
