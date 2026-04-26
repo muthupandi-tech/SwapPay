@@ -16,23 +16,34 @@ exports.registerUser = async (req, res) => {
     }
 
     try {
-        // Hash the password
+        // 1. Check if user already exists
+        const checkQuery = 'SELECT id FROM users WHERE email = $1';
+        const { rows: existingUsers } = await pool.query(checkQuery, [email]);
+
+        if (existingUsers.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "User already registered with this email"
+            });
+        }
+
+        // 2. Hash the password
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Generate 6-digit OTP
+        // 3. Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         // 5 minutes expiry
         const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-        // Store user in MySQL database
+        // 4. Store user in PostgreSQL database
         // const query = 'INSERT INTO users (name, phone, email, college, password, is_verified, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?, FALSE, ?, ?)';
         // const [result] = await pool.execute(query, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
         
-        const query = 'INSERT INTO users (name, phone, email, college, password, is_verified, otp_code, otp_expiry) VALUES ($1, $2, $3, $4, $5, FALSE, $6, $7) RETURNING id';
-        const { rows: insertResult } = await pool.query(query, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
+        const insertQuery = 'INSERT INTO users (name, phone, email, college, password, is_verified, otp_code, otp_expiry) VALUES ($1, $2, $3, $4, $5, FALSE, $6, $7) RETURNING id';
+        await pool.query(insertQuery, [name, phone, email, college, hashedPassword, otp, otpExpiry]);
 
-        // Send OTP Email
+        // 5. Send OTP Email
         await emailService.sendOTPEmail(email, otp);
 
         return res.status(201).json({ 
@@ -42,11 +53,17 @@ exports.registerUser = async (req, res) => {
         });
     } catch (error) {
         console.error('Registration Error:', error);
-        // if (error.code === 'ER_DUP_ENTRY') {
-        if (error.code === '23505') { // Postgres unique_violation code
-            return res.status(400).send('Email is already registered.');
+        // Postgres unique_violation code check as a safety measure
+        if (error.code === '23505') { 
+            return res.status(400).json({
+                success: false,
+                message: "User already registered with this email"
+            });
         }
-        return res.status(500).send('An error occurred during registration.');
+        return res.status(500).json({
+            success: false,
+            message: 'An error occurred during registration.'
+        });
     }
 };
 
