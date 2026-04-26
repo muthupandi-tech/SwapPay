@@ -1,4 +1,5 @@
-const mysql = require('mysql2');
+// const mysql = require('mysql2');
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const pool = require('../config/db');
 
@@ -11,8 +12,14 @@ exports.getProfile = async (req, res) => {
         }
 
         // Fetch User details
+        /*
         const [userRows] = await pool.execute(
             'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, recovery_progress, created_at FROM users WHERE id = ?',
+            [userId]
+        );
+        */
+        const { rows: userRows } = await pool.query(
+            'SELECT id, name, phone, email, college, campus_name, lat, lng, block_name, role, auto_match, recovery_progress, created_at FROM users WHERE id = $1',
             [userId]
         );
 
@@ -23,20 +30,38 @@ exports.getProfile = async (req, res) => {
         const user = userRows[0];
 
         // Total Swaps Completed
+        /*
         const [swapRows] = await pool.execute(
             `SELECT COUNT(*) as completed_count 
              FROM swaps 
              WHERE status = 'completed' AND (user_id = ? OR matched_user_id = ?)`,
             [userId, userId]
         );
+        */
+        const { rows: swapRows } = await pool.query(
+            `SELECT COUNT(*) as completed_count 
+             FROM swaps 
+             WHERE status = 'completed' AND (user_id = $1 OR matched_user_id = $2)`,
+            [userId, userId]
+        );
         const totalSwapsCompleted = swapRows[0].completed_count;
 
         // Trust Score & Ratings
+        /*
         const [ratingRows] = await pool.execute(
             `SELECT r.stars, r.created_at, u.name as rater_name 
              FROM ratings r
              JOIN users u ON r.rater_user_id = u.id
              WHERE r.rated_user_id = ?
+             ORDER BY r.created_at DESC`,
+            [userId]
+        );
+        */
+        const { rows: ratingRows } = await pool.query(
+            `SELECT r.stars, r.created_at, u.name as rater_name 
+             FROM ratings r
+             JOIN users u ON r.rater_user_id = u.id
+             WHERE r.rated_user_id = $1
              ORDER BY r.created_at DESC`,
             [userId]
         );
@@ -87,8 +112,12 @@ exports.updateProfile = async (req, res) => {
             return res.status(400).json({ error: 'Name, phone, and college are required.' });
         }
 
-        await pool.execute(
-            'UPDATE users SET name = ?, phone = ?, college = ? WHERE id = ?',
+        // await pool.execute(
+        //     'UPDATE users SET name = ?, phone = ?, college = ? WHERE id = ?',
+        //     [name, phone, college, userId]
+        // );
+        await pool.query(
+            'UPDATE users SET name = $1, phone = $2, college = $3 WHERE id = $4',
             [name, phone, college, userId]
         );
 
@@ -114,8 +143,12 @@ exports.updateLocation = async (req, res) => {
             return res.status(400).json({ error: 'Latitude and Longitude are required.' });
         }
 
-        await pool.execute(
-            'UPDATE users SET lat = ?, lng = ?, campus_name = "Auto-Verified Campus" WHERE id = ?',
+        // await pool.execute(
+        //     'UPDATE users SET lat = ?, lng = ?, campus_name = "Auto-Verified Campus" WHERE id = ?',
+        //     [lat, lng, userId]
+        // );
+        await pool.query(
+            'UPDATE users SET lat = $1, lng = $2, campus_name = \'Auto-Verified Campus\' WHERE id = $3',
             [lat, lng, userId]
         );
 
@@ -140,8 +173,12 @@ exports.postLocation = async (req, res) => {
             return res.status(400).json({ error: 'latitude and longitude are required.' });
         }
 
-        await pool.execute(
-            'UPDATE users SET latitude = ?, longitude = ? WHERE id = ?',
+        // await pool.execute(
+        //     'UPDATE users SET latitude = ?, longitude = ? WHERE id = ?',
+        //     [latitude, longitude, userId]
+        // );
+        await pool.query(
+            'UPDATE users SET lat = $1, lng = $2 WHERE id = $3',
             [latitude, longitude, userId]
         );
 
@@ -165,9 +202,13 @@ exports.updateAutoMatch = async (req, res) => {
             return res.status(400).json({ error: 'autoMatch value is required.' });
         }
 
-        await pool.execute(
-            'UPDATE users SET auto_match = ? WHERE id = ?',
-            [autoMatch ? 1 : 0, userId]
+        // await pool.execute(
+        //     'UPDATE users SET auto_match = ? WHERE id = ?',
+        //     [autoMatch ? 1 : 0, userId]
+        // );
+        await pool.query(
+            'UPDATE users SET auto_match = $1 WHERE id = $2',
+            [autoMatch, userId]
         );
 
         res.json({ success: true, message: `Auto-Match turned ${autoMatch ? 'ON' : 'OFF'}.` });
@@ -181,8 +222,14 @@ exports.updateAutoMatch = async (req, res) => {
 exports.getSettings = async (req, res) => {
     try {
         const userId = req.session.userId;
+        /*
         const [rows] = await pool.execute(
             'SELECT auto_match, notification_sound, notification_vibration, notification_animation, search_radius FROM users WHERE id = ?',
+            [userId]
+        );
+        */
+        const { rows } = await pool.query(
+            'SELECT auto_match, notification_sound, notification_vibration, notification_animation, search_radius FROM users WHERE id = $1',
             [userId]
         );
         
@@ -191,10 +238,14 @@ exports.getSettings = async (req, res) => {
         }
         
         const settings = {
-            autoMatch: rows[0].auto_match === 1,
-            sound: rows[0].notification_sound === 1,
-            vibration: rows[0].notification_vibration === 1,
-            animation: rows[0].notification_animation === 1,
+            // autoMatch: rows[0].auto_match === 1,
+            // sound: rows[0].notification_sound === 1,
+            // vibration: rows[0].notification_vibration === 1,
+            // animation: rows[0].notification_animation === 1,
+            autoMatch: rows[0].auto_match,
+            sound: rows[0].notification_sound,
+            vibration: rows[0].notification_vibration,
+            animation: rows[0].notification_animation,
             search_radius: rows[0].search_radius || 300
         };
         
@@ -214,9 +265,13 @@ exports.updateSettings = async (req, res) => {
             return res.status(400).json({ error: 'All settings values are required.' });
         }
         
-        await pool.execute(
-            'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ?, search_radius = ? WHERE id = ?',
-            [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, search_radius || 300, userId]
+        // await pool.execute(
+        //     'UPDATE users SET auto_match = ?, notification_sound = ?, notification_vibration = ?, notification_animation = ?, search_radius = ? WHERE id = ?',
+        //     [autoMatch ? 1 : 0, sound ? 1 : 0, vibration ? 1 : 0, animation ? 1 : 0, search_radius || 300, userId]
+        // );
+        await pool.query(
+            'UPDATE users SET auto_match = $1, notification_sound = $2, notification_vibration = $3, notification_animation = $4, search_radius = $5 WHERE id = $6',
+            [autoMatch, sound, vibration, animation, search_radius || 300, userId]
         );
         
         res.json({ success: true, message: 'Settings updated successfully.' });
@@ -240,7 +295,8 @@ exports.changePassword = async (req, res) => {
         }
 
         // Fetch current password
-        const [rows] = await pool.execute('SELECT password FROM users WHERE id = ?', [userId]);
+        // const [rows] = await pool.execute('SELECT password FROM users WHERE id = ?', [userId]);
+        const { rows } = await pool.query('SELECT password FROM users WHERE id = $1', [userId]);
         if (rows.length === 0) {
             return res.status(404).json({ error: 'User not found.' });
         }
@@ -253,7 +309,8 @@ exports.changePassword = async (req, res) => {
         }
 
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        await pool.execute('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        // await pool.execute('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedNewPassword, userId]);
 
         res.json({ success: true, message: 'Password updated successfully ✅' });
 

@@ -1,11 +1,18 @@
-const mysql = require('mysql2/promise');
+// const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
 async function testQuery() {
+    /*
     const pool = mysql.createPool({
         host: 'localhost',
         user: 'root',
         password: 'mysqlpandi',
         database: 'swappay'
+    });
+    */
+    const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
     });
 
     try {
@@ -21,7 +28,8 @@ async function testQuery() {
             WHERE s.status = 'active' OR s.status = 'open'
             ORDER BY s.created_at DESC LIMIT 5
         `;
-        const [rows] = await pool.execute(query);
+        // const [rows] = await pool.execute(query);
+        const { rows } = await pool.query(query);
         console.log('Query returned successfully. Rows:', rows.length);
         
         console.log('Testing Swap Feed Query...');
@@ -41,9 +49,10 @@ async function testQuery() {
               (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
             FROM swaps s
             JOIN users u ON s.user_id = u.id
-            WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open')
+            WHERE (LOWER(s.status) = 'active' OR LOWER(s.status) = 'open')
         `;
-        const [feedRows] = await pool.execute(feedQ);
+        // const [feedRows] = await pool.execute(feedQ);
+        const { rows: feedRows } = await pool.query(feedQ);
         console.log('Feed Query returned successfully. Rows:', feedRows.length);
         
     } catch (e) {

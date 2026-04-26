@@ -15,7 +15,8 @@ const chatController = {
             // 1. Verify existence & Auth across both schemas
             let isAuthorized = false;
 
-            const [swapRows] = await pool.execute('SELECT id, user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
+            // const [swapRows] = await pool.execute('SELECT id, user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
+            const { rows: swapRows } = await pool.query('SELECT id, user_id, matched_user_id FROM swaps WHERE id = $1', [swapId]);
             
             if (swapRows.length > 0) {
                 const swap = swapRows[0];
@@ -25,7 +26,8 @@ const chatController = {
             }
 
             if (!isAuthorized) {
-                const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+                // const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+                const { rows: matchRows } = await pool.query('SELECT requester_id, accepter_id FROM matches WHERE swap_id = $1 AND (requester_id = $2 OR accepter_id = $3)', [swapId, userId, userId]);
                 if (matchRows.length > 0) {
                     isAuthorized = true;
                 }
@@ -42,10 +44,11 @@ const chatController = {
                     u.name as sender_name
                 FROM chat_messages cm
                 JOIN users u ON cm.sender_id = u.id
-                WHERE cm.swap_id = ?
-                ORDER BY cm.created_at ASC
-            `;
-            const [messages] = await pool.execute(query, [swapId]);
+                    WHERE cm.swap_id = $1
+                    ORDER BY cm.created_at ASC
+                `;
+                // const [messages] = await pool.execute(query, [swapId]);
+                const { rows: messages } = await pool.query(query, [swapId]);
 
             return res.json({ success: true, messages });
         } catch (error) {
@@ -60,14 +63,16 @@ const chatController = {
      */
     saveMessage: async (swapId, senderId, message) => {
         try {
-            const [swapRows] = await pool.execute('SELECT user_id, matched_user_id, status FROM swaps WHERE id = ?', [swapId]);
+            // const [swapRows] = await pool.execute('SELECT user_id, matched_user_id, status FROM swaps WHERE id = ?', [swapId]);
+            const { rows: swapRows } = await pool.query('SELECT user_id, matched_user_id, status FROM swaps WHERE id = $1', [swapId]);
             if (swapRows.length === 0) return null;
             
             const swap = swapRows[0];
             let receiverId;
 
             // Resolve target receiver abstracting across legacy matching logic vs active DB Match system
-            const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            // const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            const { rows: matchRows } = await pool.query('SELECT requester_id, accepter_id FROM matches WHERE swap_id = $1', [swapId]);
             if (matchRows.length > 0) {
                 const match = matchRows[0];
                 receiverId = (match.requester_id === parseInt(senderId)) ? match.accepter_id : match.requester_id;
@@ -77,10 +82,17 @@ const chatController = {
 
 
             // Insert
+            /*
             const [result] = await pool.execute(
                 'INSERT INTO chat_messages (swap_id, sender_id, message) VALUES (?, ?, ?)',
                 [swapId, senderId, message]
             );
+            */
+            const { rows: insertRows } = await pool.query(
+                'INSERT INTO chat_messages (swap_id, sender_id, message) VALUES ($1, $2, $3) RETURNING id',
+                [swapId, senderId, message]
+            );
+            const insertId = insertRows[0].id;
 
             // Fetch back to return complete object including timestamp & sender name
             const [newMessage] = await pool.execute(`
@@ -89,8 +101,10 @@ const chatController = {
                     u.name as sender_name
                 FROM chat_messages cm
                 JOIN users u ON cm.sender_id = u.id
-                WHERE cm.id = ?
-            `, [result.insertId]);
+                WHERE cm.id = $1
+            `;
+            // const [newMessage] = await pool.execute(queryFetch, [result.insertId]);
+            const { rows: newMessage } = await pool.query(queryFetch, [insertId]);
 
             const savedMsg = newMessage[0];
             savedMsg.receiverId = receiverId; // Add receiverId for server.js to use
@@ -106,7 +120,8 @@ const chatController = {
      */
     updateMessageStatus: async (messageId, status) => {
         try {
-            await pool.execute('UPDATE chat_messages SET status = ? WHERE id = ?', [status, messageId]);
+            // await pool.execute('UPDATE chat_messages SET status = ? WHERE id = ?', [status, messageId]);
+            await pool.query('UPDATE chat_messages SET status = $1 WHERE id = $2', [status, messageId]);
             return true;
         } catch (error) {
             console.error('Error updating message status:', error);
@@ -119,8 +134,14 @@ const chatController = {
      */
     markMessagesAsSeen: async (swapId, userId) => {
         try {
+            /*
             await pool.execute(
                 'UPDATE chat_messages SET status = "seen" WHERE swap_id = ? AND sender_id != ? AND status != "seen"',
+                [swapId, userId]
+            );
+            */
+            await pool.query(
+                'UPDATE chat_messages SET status = \'seen\' WHERE swap_id = $1 AND sender_id != $2 AND status != \'seen\'',
                 [swapId, userId]
             );
             return true;
@@ -135,7 +156,8 @@ const chatController = {
      */
     getSwapParticipants: async (swapId) => {
         try {
-            const [rows] = await pool.execute('SELECT user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
+            // const [rows] = await pool.execute('SELECT user_id, matched_user_id FROM swaps WHERE id = ?', [swapId]);
+            const { rows } = await pool.query('SELECT user_id, matched_user_id FROM swaps WHERE id = $1', [swapId]);
             return rows.length > 0 ? rows[0] : null;
         } catch (error) {
             console.error('Error getting swap participants:', error);

@@ -1,5 +1,7 @@
-const mysql = require('mysql2/promise');
+// const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
+/*
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
@@ -8,6 +10,14 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
+});
+*/
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
 exports.submitFeedback = async (req, res) => {
@@ -36,12 +46,18 @@ exports.submitFeedback = async (req, res) => {
     }
 
     try {
+        /*
         const [result] = await pool.execute(
             'INSERT INTO feedbacks (user_id, type, category, message, rating) VALUES (?, ?, ?, ?, ?)',
             [userId, type, category || null, message.trim(), type === 'feedback' ? rating : null]
         );
-
         res.status(201).json({ success: true, message: 'Thanks for your feedback ❤️', feedbackId: result.insertId });
+        */
+        const { rows } = await pool.query(
+            'INSERT INTO feedbacks (user_id, type, category, message, rating) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [userId, type, category || null, message.trim(), type === 'feedback' ? rating : null]
+        );
+        res.status(201).json({ success: true, message: 'Thanks for your feedback ❤️', feedbackId: rows[0].id });
     } catch (error) {
         console.error('Error submitting feedback:', error);
         res.status(500).json({ error: 'An error occurred while submitting your feedback.' });

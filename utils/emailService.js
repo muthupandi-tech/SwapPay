@@ -1,6 +1,8 @@
 const nodemailer = require('nodemailer');
-const mysql = require('mysql2');
+// const mysql = require('mysql2');
+const { Pool } = require('pg');
 
+/*
 const pool = mysql.createPool({
     host: 'localhost',
     user: 'root',
@@ -12,11 +14,20 @@ const pool = mysql.createPool({
 });
 
 const promisePool = pool.promise();
+*/
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
 
 // Check if email notifications are globally enabled in the database
 async function isEmailNotificationEnabled() {
     try {
-        const [rows] = await promisePool.execute("SELECT setting_value FROM settings WHERE setting_key = 'email_notifications_enabled'");
+        // const [rows] = await promisePool.execute("SELECT setting_value FROM settings WHERE setting_key = 'email_notifications_enabled'");
+        const { rows } = await pool.query("SELECT setting_value FROM settings WHERE setting_key = 'email_notifications_enabled'");
         if (rows.length > 0) {
             return rows[0].setting_value === 'true';
         }

@@ -1,9 +1,10 @@
 const cron = require('node-cron');
-const mysql = require('mysql2');
+//const mysql = require('mysql2');
+const { Pool } = require('pg');
 const { sendPendingReminderEmail, sendBestMatchFoundEmail } = require('../utils/emailService');
 
 // Database connection pool
-const pool = mysql.createPool({
+/*const pool = mysql.createPool({
     host: 'localhost',
     user: 'root',
     password: 'mysqlpandi',
@@ -11,13 +12,21 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
+});*/
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
-const promisePool = pool.promise();
+
+// const promisePool = pool.promise();
 
 // Fetch settings from the database
 async function getSettings() {
     try {
-        const [rows] = await promisePool.execute("SELECT setting_key, setting_value FROM settings");
+        // const [rows] = await promisePool.execute("SELECT setting_key, setting_value FROM settings");
+        const { rows } = await pool.query("SELECT setting_key, setting_value FROM settings");
         const settings = {};
         rows.forEach(row => settings[row.setting_key] = row.setting_value);
 
@@ -49,11 +58,12 @@ async function checkPendingSwaps() {
             WHERE s.status = 'matched'
             AND (
                 s.last_reminder_sent IS NULL 
-                OR s.last_reminder_sent <= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                OR s.last_reminder_sent <= NOW() - ($1 * INTERVAL '1 hour')
             )
         `;
 
-        const [swaps] = await promisePool.execute(query, [intervalHours]);
+        // const [swaps] = await promisePool.execute(query, [intervalHours]);
+        const { rows: swaps } = await pool.query(query, [intervalHours]);
 
         for (const swap of swaps) {
             const nextCount = swap.reminder_count + 1;
@@ -92,10 +102,11 @@ async function checkPendingSwaps() {
             // Update database tracking
             const updateTracking = `
                 UPDATE swaps 
-                SET reminder_count = ?, last_reminder_sent = NOW() 
-                WHERE id = ?
+                SET reminder_count = $1, last_reminder_sent = NOW() 
+                WHERE id = $2
             `;
-            await promisePool.execute(updateTracking, [nextCount, swap.id]);
+            // await promisePool.execute(updateTracking, [nextCount, swap.id]);
+            await pool.query(updateTracking, [nextCount, swap.id]);
         }
 
         console.log(`[CRON Service] Processed ${swaps.length} pending swaps.`);
@@ -108,37 +119,57 @@ async function checkBestMatches() {
     console.log('[CRON Service] Running check for best matches (Smart Notifications)...');
     try {
         // 1. Fetch users who have auto_match disabled
+        /*
         const [users] = await promisePool.execute(`
             SELECT id, email, name, last_best_match_score, last_notified_at 
             FROM users 
             WHERE auto_match = 0
         `);
+        */
+        const { rows: users } = await pool.query(`
+            SELECT id, email, name, last_best_match_score, last_notified_at 
+            FROM users 
+            WHERE auto_match = FALSE
+        `);
 
         for (const user of users) {
-             // 2. Fetch user's active swaps
-             const [mySwaps] = await promisePool.execute(
-                 'SELECT id, amount, type FROM swaps WHERE user_id = ? AND (status = "active" OR status = "open")',
-                 [user.id]
-             );
- 
-             if (mySwaps.length === 0) continue;
- 
-             // 3. Fetch potential partners (active swaps from others, compatible types)
-             // We calculate trust_score (AVG ratings / 5) on the fly
-             const [partners] = await promisePool.execute(`
+            // 2. Fetch user's active swaps
+            // const [mySwaps] = await promisePool.execute(
+            //    'SELECT id, amount, type FROM swaps WHERE user_id = ? AND (status = "active" OR status = "open")',
+            //    [user.id]
+            // );
+            const { rows: mySwaps } = await pool.query(
+                'SELECT id, amount, type FROM swaps WHERE user_id = $1 AND (status = \'active\' OR status = \'open\')',
+                [user.id]
+            );
+
+            if (mySwaps.length === 0) continue;
+
+            // 3. Fetch potential partners (active swaps from others, compatible types)
+            // We calculate trust_score (AVG ratings / 5) on the fly
+            /*
+            const [partners] = await promisePool.execute(`
                  SELECT s.id, s.amount, s.type, s.location, u.name as partner_name,
                         (SELECT IFNULL(AVG(stars), 5) FROM ratings WHERE rated_user_id = u.id) as partner_avg_rating
                  FROM swaps s
                  JOIN users u ON s.user_id = u.id
                  WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != ?
              `, [user.id]);
- 
-             let bestMatchForUser = null;
-             let highestScoreForUser = -1;
- 
-             for (const mySwap of mySwaps) {
-                 const myAmt = parseFloat(mySwap.amount);
-                 const oppositeType = mySwap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+            */
+            const { rows: partners } = await pool.query(`
+                 SELECT s.id, s.amount, s.type, s.location, u.name as partner_name,
+                        (SELECT COALESCE(AVG(stars), 5) FROM ratings WHERE rated_user_id = u.id) as partner_avg_rating
+                 FROM swaps s
+                 JOIN users u ON s.user_id = u.id
+                 WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != $1
+             `, [user.id]);
+
+            let bestMatchForUser = null;
+            let highestScoreForUser = -1;
+
+            for (const mySwap of mySwaps) {
+                const myAmt = parseFloat(mySwap.amount);
+                const oppositeType = mySwap.type === 'need_cash' ? 'need_upi' : 'need_cash';
 
                 for (const partner of partners) {
                     if (partner.type !== oppositeType) continue;
@@ -172,7 +203,7 @@ async function checkBestMatches() {
 
             if (bestMatchForUser && (highestScoreForUser > lastScore || neverNotified) && minutesSinceLast >= 10) {
                 console.log(`[CRON Service] Sending best match alert to ${user.email} (Score: ${highestScoreForUser.toFixed(4)}, Prev: ${lastScore.toFixed(4)})`);
-                
+
                 await sendBestMatchFoundEmail(
                     user.email,
                     bestMatchForUser.myAmount,
@@ -183,8 +214,12 @@ async function checkBestMatches() {
                 );
 
                 // 5. Update user record
-                await promisePool.execute(
-                    'UPDATE users SET last_best_match_score = ?, last_notified_at = NOW() WHERE id = ?',
+                // await promisePool.execute(
+                //    'UPDATE users SET last_best_match_score = ?, last_notified_at = NOW() WHERE id = ?',
+                //    [highestScoreForUser, user.id]
+                // );
+                await pool.query(
+                    'UPDATE users SET last_best_match_score = $1, last_notified_at = NOW() WHERE id = $2',
                     [highestScoreForUser, user.id]
                 );
             }
@@ -197,7 +232,7 @@ async function checkBestMatches() {
 // Start the cron job
 function startCronService() {
     console.log('Automated Email Cron Service Initialized.');
-    
+
     // 1. Pending Swaps Reminder (Every hour)
     cron.schedule('0 * * * *', async () => {
         await checkPendingSwaps();

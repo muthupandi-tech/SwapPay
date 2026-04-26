@@ -1,14 +1,24 @@
-const mysql = require('mysql2');
+// const mysql = require('mysql2');
+const { Pool } = require('pg');
 const { generateReportPDF } = require('../utils/reportGenerator');
 const pool = require('../config/db');
 
 exports.getStats = async (req, res) => {
     try {
-        const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-        const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
-        const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
-        const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
-        const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
+        // const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        const { rows: userRows } = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        
+        // const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
+        const { rows: swapRows } = await pool.query("SELECT COUNT(*) as count FROM swaps");
+        
+        // const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        const { rows: compRows } = await pool.query("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        
+        // const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        const { rows: amtRows } = await pool.query("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        
+        // const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
+        const { rows: ratingRows } = await pool.query("SELECT AVG(stars) as avg FROM ratings");
 
         res.json({
             usersCount: userRows[0].count,
@@ -26,14 +36,26 @@ exports.getStats = async (req, res) => {
 exports.generateReport = async (req, res) => {
     try {
         // 1. Overall Statistics
-        const [totalUserRows] = await pool.execute("SELECT COUNT(*) as count FROM users");
-        const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-        const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
-        const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
-        const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
-        const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
+        // const [totalUserRows] = await pool.execute("SELECT COUNT(*) as count FROM users");
+        const { rows: totalUserRows } = await pool.query("SELECT COUNT(*) as count FROM users");
+        
+        // const [userRows] = await pool.execute("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        const { rows: userRows } = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
+        
+        // const [swapRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps");
+        const { rows: swapRows } = await pool.query("SELECT COUNT(*) as count FROM swaps");
+        
+        // const [compRows] = await pool.execute("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        const { rows: compRows } = await pool.query("SELECT COUNT(*) as count FROM swaps WHERE status = 'completed'");
+        
+        // const [amtRows] = await pool.execute("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        const { rows: amtRows } = await pool.query("SELECT SUM(amount) as total FROM swaps WHERE status = 'completed'");
+        
+        // const [ratingRows] = await pool.execute("SELECT AVG(stars) as avg FROM ratings");
+        const { rows: ratingRows } = await pool.query("SELECT AVG(stars) as avg FROM ratings");
 
         // 2. Comprehensive 14-Day Activity Pulse
+        /*
         const dailyQuery = `
             SELECT 
                 d.report_date,
@@ -68,16 +90,56 @@ exports.generateReport = async (req, res) => {
             ORDER BY d.report_date DESC
         `;
         const [dailyRows] = await pool.execute(dailyQuery);
+        */
+        const dailyQueryPostgres = `
+            SELECT 
+                d.report_date,
+                COALESCE(u.new_users, 0) as new_users,
+                COALESCE(s.pending_count, 0) as pending_count,
+                COALESCE(s.completed_count, 0) as completed_count,
+                COALESCE(s.total_amount, 0) as total_amount,
+                COALESCE(r.avg_rating, 0) as avg_rating
+            FROM (
+                SELECT (CURRENT_DATE - (n || ' day')::INTERVAL)::DATE AS report_date
+                FROM generate_series(0, 13) n
+            ) d
+            LEFT JOIN (
+                SELECT created_at::DATE as date, COUNT(*) as new_users FROM users WHERE role = 'user' GROUP BY created_at::DATE
+            ) u ON d.report_date = u.date
+            LEFT JOIN (
+                SELECT 
+                    created_at::DATE as date, 
+                    SUM(CASE WHEN status IN ('open', 'matched') THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                    SUM(amount) as total_amount
+                FROM swaps 
+                GROUP BY created_at::DATE
+            ) s ON d.report_date = s.date
+            LEFT JOIN (
+                SELECT created_at::DATE as date, AVG(stars) as avg_rating FROM ratings GROUP BY created_at::DATE
+            ) r ON d.report_date = r.date
+            ORDER BY d.report_date DESC
+        `;
+        const { rows: dailyRows } = await pool.query(dailyQueryPostgres);
 
         // 3. Feedback Status Summary
+        /*
         const feedbackSummaryQuery = `
             SELECT status, COUNT(*) as count 
             FROM feedbacks 
             GROUP BY status
         `;
         const [feedbackSummaryRows] = await pool.execute(feedbackSummaryQuery);
+        */
+        const feedbackSummaryQuery = `
+            SELECT status, COUNT(*) as count 
+            FROM feedbacks 
+            GROUP BY status
+        `;
+        const { rows: feedbackSummaryRows } = await pool.query(feedbackSummaryQuery);
 
         // 4. Detailed Recent Issues (Latest 10)
+        /*
         const feedbackDetailQuery = `
             SELECT f.message, f.status, f.type, u.name as user_name, f.created_at
             FROM feedbacks f 
@@ -86,6 +148,15 @@ exports.generateReport = async (req, res) => {
             LIMIT 10
         `;
         const [feedbackDetailRows] = await pool.execute(feedbackDetailQuery);
+        */
+        const feedbackDetailQuery = `
+            SELECT f.message, f.status, f.type, u.name as user_name, f.created_at
+            FROM feedbacks f 
+            JOIN users u ON f.user_id = u.id 
+            ORDER BY f.created_at DESC 
+            LIMIT 10
+        `;
+        const { rows: feedbackDetailRows } = await pool.query(feedbackDetailQuery);
 
         const stats = {
             totalUsersCount: totalUserRows[0].count,
@@ -116,7 +187,8 @@ exports.getAllSwaps = async (req, res) => {
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
             ORDER BY s.created_at DESC
         `;
-        const [rows] = await pool.execute(query);
+        // const [rows] = await pool.execute(query);
+        const { rows } = await pool.query(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin swaps:', error);
@@ -127,7 +199,8 @@ exports.getAllSwaps = async (req, res) => {
 exports.deleteSwap = async (req, res) => {
     try {
         const { id } = req.params;
-        await pool.execute('DELETE FROM swaps WHERE id = ?', [id]);
+        // await pool.execute('DELETE FROM swaps WHERE id = ?', [id]);
+        await pool.query('DELETE FROM swaps WHERE id = $1', [id]);
         res.json({ message: 'Swap deleted successfully' });
     } catch (error) {
         console.error('Error deleting swap:', error);
@@ -145,7 +218,8 @@ exports.getAllUsers = async (req, res) => {
             WHERE u.role = 'user'
             ORDER BY u.created_at DESC
         `;
-        const [rows] = await pool.execute(query);
+        // const [rows] = await pool.execute(query);
+        const { rows } = await pool.query(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin users:', error);
@@ -156,17 +230,20 @@ exports.getAllUsers = async (req, res) => {
 exports.blockUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const [user] = await pool.execute('SELECT is_blocked FROM users WHERE id = ?', [id]);
+        // const [user] = await pool.execute('SELECT is_blocked FROM users WHERE id = ?', [id]);
+        const { rows: user } = await pool.query('SELECT is_blocked FROM users WHERE id = $1', [id]);
         if (user.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const newStatus = !user[0].is_blocked;
-        await pool.execute('UPDATE users SET is_blocked = ? WHERE id = ?', [newStatus, id]);
+        // await pool.execute('UPDATE users SET is_blocked = ? WHERE id = ?', [newStatus, id]);
+        await pool.query('UPDATE users SET is_blocked = $1 WHERE id = $2', [newStatus, id]);
 
         const title = 'Account Status Update';
         const type = 'admin';
         const msg = newStatus ? 'Your account has been temporarily blocked by an Admin.' : 'Your account has been unblocked by an Admin.';
 
-        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [id, title, msg, type]);
+        // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [id, title, msg, type]);
+        await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [id, title, msg, type]);
 
         if (global.io) {
             global.io.to(`user_${id}`).emit('notification', {
@@ -182,7 +259,8 @@ exports.blockUser = async (req, res) => {
 
 exports.getSettings = async (req, res) => {
     try {
-        const [rows] = await pool.execute("SELECT setting_key, setting_value FROM settings");
+        // const [rows] = await pool.execute("SELECT setting_key, setting_value FROM settings");
+        const { rows } = await pool.query("SELECT setting_key, setting_value FROM settings");
         const settings = {};
         rows.forEach(row => {
             settings[row.setting_key] = row.setting_value;
@@ -201,7 +279,10 @@ exports.updateSettings = async (req, res) => {
             return res.status(400).json({ error: 'Setting key and value are required.' });
         }
 
+        /*
         await pool.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [key, value, value]);
+        */
+        await pool.query("INSERT INTO settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value", [key, value]);
         res.json({ message: 'Settings updated successfully' });
     } catch (error) {
         console.error('Error updating settings:', error);
@@ -219,7 +300,8 @@ exports.getAllFeedbacks = async (req, res) => {
             JOIN users u ON f.user_id = u.id
             ORDER BY f.created_at DESC
         `;
-        const [rows] = await pool.execute(query);
+        // const [rows] = await pool.execute(query);
+        const { rows } = await pool.query(query);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching admin feedbacks:', error);
@@ -234,7 +316,8 @@ exports.updateFeedbackStatus = async (req, res) => {
         
         if (!status) return res.status(400).json({ error: 'Status is required' });
 
-        await pool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
+        // await pool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
+        await pool.query('UPDATE feedbacks SET status = $1 WHERE id = $2', [status, id]);
         res.json({ message: `Feedback marked as ${status}` });
     } catch (error) {
         console.error('Error updating feedback status:', error);
@@ -245,7 +328,8 @@ exports.updateFeedbackStatus = async (req, res) => {
 exports.deleteFeedback = async (req, res) => {
     try {
         const { id } = req.params;
-        await pool.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
+        // await pool.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
+        await pool.query('DELETE FROM feedbacks WHERE id = $1', [id]);
         res.json({ message: 'Feedback deleted successfully' });
     } catch (error) {
         console.error('Error deleting feedback:', error);

@@ -1,4 +1,5 @@
-const mysql = require('mysql2');
+// const mysql = require('mysql2');
+const { Pool } = require('pg');
 const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail } = require('../utils/emailService');
 const pool = require('../config/db');
 
@@ -26,15 +27,21 @@ exports.createSwap = async (req, res) => {
         const parsedAmount = parseFloat(amount);
 
         // --- NEW: Respect User's auto_match preference and fetch location ---
-        const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
+        // const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
+        const { rows: userRows } = await pool.query('SELECT auto_match, latitude, longitude FROM users WHERE id = $1', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
         const userLat = userRows.length > 0 ? userRows[0].latitude : null;
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
 
         // 1. Insert the PARENT swap request initially
+        /*
         const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
         const newParentSwapId = result.insertId;
+        */
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id';
+        const { rows: insertRows } = await pool.query(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
+        const newParentSwapId = insertRows[0].id;
 
         if (!userAutoMatch) {
             console.log(`Auto-match disabled for user ${userId}. Skipping matching logic.`);
@@ -59,24 +66,25 @@ exports.createSwap = async (req, res) => {
                 FROM swaps s 
                 JOIN users u ON s.user_id = u.id
                 WHERE s.status = 'active' 
-                  AND s.type = ? 
-                  AND s.user_id != ? 
+                  AND s.type = $1 
+                  AND s.user_id != $2 
                   AND s.remaining_amount > 0
             `;
             let queryParams = [oppositeType, userId];
 
             if (!isPartialAllowed) {
-                candidateQuery += ` AND s.remaining_amount >= ? AND (s.allow_partial_match = TRUE OR s.remaining_amount = ?) `;
+                candidateQuery += ` AND s.remaining_amount >= $3 AND (s.allow_partial_match = TRUE OR s.remaining_amount = $4) `;
                 queryParams.push(remainingNeeded, remainingNeeded);
             } else {
-                candidateQuery += ` AND (s.allow_partial_match = TRUE OR s.remaining_amount <= ?) `;
+                candidateQuery += ` AND (s.allow_partial_match = TRUE OR s.remaining_amount <= $3) `;
                 queryParams.push(remainingNeeded);
             }
 
-            candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = ? THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
+            candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = $3 THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
             queryParams.push(remainingNeeded);
 
-            const [matchRows] = await pool.execute(candidateQuery, queryParams);
+            // const [matchRows] = await pool.execute(candidateQuery, queryParams);
+            const { rows: matchRows } = await pool.query(candidateQuery, queryParams);
 
             if (matchRows.length > 0) {
                 let perfectMatchIndex = matchRows.findIndex(r => parseFloat(r.remaining_amount) === remainingNeeded);
@@ -86,18 +94,18 @@ exports.createSwap = async (req, res) => {
                     autoMatchProceed = true;
                 } else {
                     // Do not auto-match. Just email the user the options and leave swap marked active.
-                    let emailPartners = matchRows.map(r => ({
+                    const emailPartners = matchRows.map(r => ({
                         name: r.partner_name,
                         amount: r.remaining_amount,
-                        type: r.type, // Added type
                         rating: r.partner_rating,
                         location: r.location
                     }));
 
-                    const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
-                    if (userRows.length > 0) {
+                    // const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+                    const { rows: uRows } = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+                    if (uRows.length > 0) {
                         const { sendMultiplePartnersAvailableEmail } = require('../utils/emailService');
-                        await sendMultiplePartnersAvailableEmail(userRows[0].email, parsedAmount, emailPartners);
+                        await sendMultiplePartnersAvailableEmail(uRows[0].email, parsedAmount, emailPartners);
                     }
 
                     return res.status(201).json({
@@ -119,24 +127,25 @@ exports.createSwap = async (req, res) => {
                 let candidateQuery = `
                     SELECT * FROM swaps 
                     WHERE status = 'active' 
-                      AND type = ? 
-                      AND user_id != ? 
+                      AND type = $1 
+                      AND user_id != $2 
                       AND remaining_amount > 0
                 `;
                 let queryParams = [oppositeType, userId];
 
                 if (!isPartialAllowed) {
-                    candidateQuery += ` AND remaining_amount >= ? `;
-                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount = ?) `;
+                    candidateQuery += ` AND remaining_amount >= $3 `;
+                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount = $4) `;
                     queryParams.push(remainingNeeded, remainingNeeded);
                 } else {
-                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount <= ?) `;
+                    candidateQuery += ` AND (allow_partial_match = TRUE OR remaining_amount <= $3) `;
                     queryParams.push(remainingNeeded);
                 }
 
                 candidateQuery += ` ORDER BY created_at ASC LIMIT 1`;
 
-                const [matchRows] = await pool.execute(candidateQuery, queryParams);
+                // const [matchRows] = await pool.execute(candidateQuery, queryParams);
+                const { rows: matchRows } = await pool.query(candidateQuery, queryParams);
 
                 if (matchRows.length === 0) {
                     break; // No more suitable matches found
@@ -152,15 +161,29 @@ exports.createSwap = async (req, res) => {
                 const newCandidateRemaining = candidateRemaining - chunkAmount;
                 const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
+                /*
                 await pool.execute(
                     'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
                     [newCandidateRemaining, candidateStatus, candidateStatus, candidate.id]
                 );
+                */
+                await pool.query(
+                    'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END WHERE id = $4',
+                    [newCandidateRemaining, candidateStatus, candidateStatus, candidate.id]
+                );
 
                 // Create CHILD SWAP representing the exact match chunk
+                /*
                 const [childResult] = await pool.execute(`
                     INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
+                `, [
+                    userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id, userLat, userLng
+                ]);
+                */
+                const { rows: childResult } = await pool.query(`
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12) RETURNING id
                 `, [
                     userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id, userLat, userLng
                 ]);
@@ -168,7 +191,7 @@ exports.createSwap = async (req, res) => {
                 matchedChunks.push({
                     partnerId: candidate.user_id,
                     chunkAmount: chunkAmount,
-                    childSwapId: childResult.insertId,
+                    childSwapId: childResult[0].id,
                     candidateParentId: candidate.id,
                     remainingNeededAfter: remainingNeeded - chunkAmount
                 });
@@ -182,8 +205,14 @@ exports.createSwap = async (req, res) => {
 
             // Update Our Parent Swap based on what was matched
             const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
+            /*
             await pool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = \'matched\', NOW(), match_time) WHERE id = ?',
+                [remainingNeeded, finalParentStatus, finalParentStatus, newParentSwapId]
+            );
+            */
+            await pool.query(
+                'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END WHERE id = $4',
                 [remainingNeeded, finalParentStatus, finalParentStatus, newParentSwapId]
             );
 
@@ -198,8 +227,10 @@ exports.createSwap = async (req, res) => {
 
                     // Notifications
                     const msg = `Match Found! ₹${chunkAmt} of your request has been matched with a partner!`;
-                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partial Match', msg, 'match']);
-                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [partnerId, 'Partial Match', msg, 'match']);
+                    // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partial Match', msg, 'match']);
+                    // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [partnerId, 'Partial Match', msg, 'match']);
+                    await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [userId, 'Partial Match', msg, 'match']);
+                    await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [partnerId, 'Partial Match', msg, 'match']);
 
                     if (global.io) {
                         global.io.to(`user_${userId}`).emit('notification', { title: 'Partial Match', message: msg, type: 'match', created_at: new Date() });
@@ -210,8 +241,10 @@ exports.createSwap = async (req, res) => {
                     // Emails
                     (async () => {
                         try {
-                            const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-                            const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [partnerId]);
+                            // const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                            // const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [partnerId]);
+                            const { rows: meRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [userId]);
+                            const { rows: partnerRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [partnerId]);
 
                             if (meRows.length > 0 && partnerRows.length > 0) {
                                 const me = meRows[0];
@@ -221,7 +254,8 @@ exports.createSwap = async (req, res) => {
                                 await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, type === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
 
                                 // Partner remaining needs to pull from DB, but we know it's CandidateParent's remaining
-                                const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                                // const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                                const { rows: pRow } = await pool.query('SELECT remaining_amount FROM swaps WHERE id = $1', [chunk.candidateParentId]);
                                 const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
                                 await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', location);
                             }
@@ -242,10 +276,11 @@ exports.createSwap = async (req, res) => {
 
         // If no matches at all (or autoMatchProceed is false and no candidates found)
         try {
-            const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
-            if (userRows.length > 0) {
+            // const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [userId]);
+            const { rows: uEmailRows } = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+            if (uEmailRows.length > 0) {
                 const { sendSwapCreatedEmail } = require('../utils/emailService');
-                await sendSwapCreatedEmail(userRows[0].email, type, parsedAmount, location);
+                await sendSwapCreatedEmail(uEmailRows[0].email, type, parsedAmount, location);
             }
         } catch (e) {
             console.error('Error sending create swap email', e);
@@ -274,10 +309,11 @@ exports.getNearbySwaps = async (req, res) => {
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
-            WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != ? 
+            WHERE (s.status = 'active' OR s.status = 'open') AND s.user_id != $1 
             ORDER BY s.created_at DESC
         `;
-        const [rows] = await pool.execute(query, [userId]);
+        // const [rows] = await pool.execute(query, [userId]);
+        const { rows } = await pool.query(query, [userId]);
 
         const enhancedRows = rows.map(swap => ({ ...swap, distanceKm: undefined }));
 
@@ -303,8 +339,9 @@ exports.completeSwap = async (req, res) => {
     }
 
     try {
-        const checkQuery = 'SELECT * FROM swaps WHERE id = ?';
-        const [rows] = await pool.execute(checkQuery, [swapId]);
+        // const checkQuery = 'SELECT * FROM swaps WHERE id = ?';
+        // const [rows] = await pool.execute(checkQuery, [swapId]);
+        const { rows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Swap request not found.' });
@@ -326,7 +363,8 @@ exports.completeSwap = async (req, res) => {
         if (swap.user_id === userId || swap.matched_user_id === userId) {
             isAuthorized = true;
         } else {
-            const [matchRows] = await pool.execute('SELECT * FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+            // const [matchRows] = await pool.execute('SELECT * FROM matches WHERE swap_id = ? AND (requester_id = ? OR accepter_id = ?)', [swapId, userId, userId]);
+            const { rows: matchRows } = await pool.query('SELECT * FROM matches WHERE swap_id = $1 AND (requester_id = $2 OR accepter_id = $3)', [swapId, userId, userId]);
             if (matchRows.length > 0) isAuthorized = true;
         }
 
@@ -353,11 +391,14 @@ exports.completeSwap = async (req, res) => {
         }
 
         if (newStatus === 'completed') {
-            await pool.execute('UPDATE swaps SET completed_by = ?, status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            // await pool.execute('UPDATE swaps SET completed_by = ?, status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            await pool.query('UPDATE swaps SET completed_by = $1, status = $2, completed_at = CURRENT_TIMESTAMP WHERE id = $3', [JSON.stringify(completedBy), newStatus, swapId]);
         } else {
-            await pool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            // await pool.execute('UPDATE swaps SET completed_by = ?, status = ? WHERE id = ?', [JSON.stringify(completedBy), newStatus, swapId]);
+            await pool.query('UPDATE swaps SET completed_by = $1, status = $2 WHERE id = $3', [JSON.stringify(completedBy), newStatus, swapId]);
         }
-        await pool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
+        // await pool.execute('UPDATE matches SET status = ? WHERE swap_id = ?', [newStatus, swapId]);
+        await pool.query('UPDATE matches SET status = $1 WHERE swap_id = $2', [newStatus, swapId]);
 
         if (newStatus === 'completed') {
             // Both have completed! Finalize it.
@@ -365,21 +406,26 @@ exports.completeSwap = async (req, res) => {
             // --- NEW: Trust Recovery System ---
             for (let uid of [swap.user_id, swap.matched_user_id]) {
                 if (!uid) continue;
-                const [trustRows] = await pool.execute('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?', [uid]);
+                // const [trustRows] = await pool.execute('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?', [uid]);
+                const { rows: trustRows } = await pool.query('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = $1', [uid]);
                 const avgStars = parseFloat(trustRows[0].avg_stars);
                 if (!isNaN(avgStars) && avgStars < 2) {
-                    const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [uid]);
+                    // const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [uid]);
+                    const { rows: uRow } = await pool.query('SELECT recovery_progress FROM users WHERE id = $1', [uid]);
                     if (uRow.length > 0) {
                         let prog = (uRow[0].recovery_progress || 0) + 1;
                         if (prog >= 2) {
-                            await pool.execute('UPDATE users SET recovery_progress = 0 WHERE id = ?', [uid]);
+                            // await pool.execute('UPDATE users SET recovery_progress = 0 WHERE id = ?', [uid]);
+                            await pool.query('UPDATE users SET recovery_progress = 0 WHERE id = $1', [uid]);
                             const msg = "✅ Your account is back to good standing! Keep completing swaps to naturally improve your Trust Score.";
-                            await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [uid, 'Account Restored', msg, 'system']);
+                            // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [uid, 'Account Restored', msg, 'system']);
+                            await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [uid, 'Account Restored', msg, 'system']);
                             if (global.io) {
                                 global.io.to(`user_${uid}`).emit('notification', { title: 'Account Restored', message: msg, type: 'system', created_at: new Date() });
                             }
                         } else {
-                            await pool.execute('UPDATE users SET recovery_progress = ? WHERE id = ?', [prog, uid]);
+                            // await pool.execute('UPDATE users SET recovery_progress = ? WHERE id = ?', [prog, uid]);
+                            await pool.query('UPDATE users SET recovery_progress = $1 WHERE id = $2', [prog, uid]);
                         }
                     }
                 }
@@ -391,9 +437,11 @@ exports.completeSwap = async (req, res) => {
             const title = 'Swap Completed';
             const type = 'completed';
 
-            await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.user_id, title, msg, type]);
+            // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.user_id, title, msg, type]);
+            await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [swap.user_id, title, msg, type]);
             if (swap.matched_user_id) {
-                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.matched_user_id, title, msg, type]);
+                // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [swap.matched_user_id, title, msg, type]);
+                await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [swap.matched_user_id, title, msg, type]);
             }
 
             // Emit Socket Events
@@ -415,8 +463,10 @@ exports.completeSwap = async (req, res) => {
 
             // Email Notification
             try {
-                const [u1Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.user_id]);
-                const [u2Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.matched_user_id]);
+                // const [u1Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.user_id]);
+                // const [u2Rows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [swap.matched_user_id]);
+                const { rows: u1Rows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [swap.user_id]);
+                const { rows: u2Rows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [swap.matched_user_id]);
 
                 if (u1Rows.length > 0 && u2Rows.length > 0) {
                     const { sendSwapCompletedEmail } = require('../utils/emailService');
@@ -432,14 +482,22 @@ exports.completeSwap = async (req, res) => {
             // Propagate completion to parent swaps (Crowd-Swap containers)
             const parentIds = [swap.parent_swap_id, swap.matched_parent_swap_id].filter(id => id != null);
             for (const pid of parentIds) {
-                const [pRows] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [pid]);
+                // const [pRows] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [pid]);
+                const { rows: pRows } = await pool.query('SELECT remaining_amount FROM swaps WHERE id = $1', [pid]);
                 if (pRows.length > 0 && parseFloat(pRows[0].remaining_amount) === 0) {
+                    /*
                     const [cRows] = await pool.execute(
                         'SELECT id FROM swaps WHERE (parent_swap_id = ? OR matched_parent_swap_id = ?) AND status != "completed"',
                         [pid, pid]
                     );
+                    */
+                    const { rows: cRows } = await pool.query(
+                        'SELECT id FROM swaps WHERE (parent_swap_id = $1 OR matched_parent_swap_id = $2) AND status != \'completed\'',
+                        [pid, pid]
+                    );
                     if (cRows.length === 0) {
-                        await pool.execute('UPDATE swaps SET status = "completed", completed_at = CURRENT_TIMESTAMP WHERE id = ?', [pid]);
+                        // await pool.execute('UPDATE swaps SET status = "completed", completed_at = CURRENT_TIMESTAMP WHERE id = ?', [pid]);
+                        await pool.query('UPDATE swaps SET status = \'completed\', completed_at = CURRENT_TIMESTAMP WHERE id = $1', [pid]);
                     }
                 }
             }
@@ -450,8 +508,10 @@ exports.completeSwap = async (req, res) => {
 
             if (partnerId) {
                 try {
-                    const [meRows] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
-                    const [partnerRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [partnerId]);
+                    // const [meRows] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+                    // const [partnerRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [partnerId]);
+                    const { rows: meRows } = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+                    const { rows: partnerRows } = await pool.query('SELECT email FROM users WHERE id = $1', [partnerId]);
 
                     if (meRows.length > 0 && partnerRows.length > 0) {
                         const { sendPendingConfirmationEmail } = require('../utils/emailService');
@@ -483,29 +543,32 @@ exports.getDashboardStats = async (req, res) => {
         const activeSwapsQuery = `
             SELECT COUNT(*) AS count 
             FROM swaps 
-            WHERE (user_id = ? OR matched_user_id = ?) 
+            WHERE (user_id = $1 OR matched_user_id = $2) 
               AND status IN ('active', 'open', 'matched', 'pending_confirmation')
         `;
-        const [activeRows] = await pool.execute(activeSwapsQuery, [userId, userId]);
+        // const [activeRows] = await pool.execute(activeSwapsQuery, [userId, userId]);
+        const { rows: activeRows } = await pool.query(activeSwapsQuery, [userId, userId]);
         const activeSwaps = activeRows[0].count;
 
         // Total Exchanged: sum of amounts where status completed
         const exchangedQuery = `
             SELECT COALESCE(SUM(amount), 0) AS total 
             FROM swaps 
-            WHERE (user_id = ? OR matched_user_id = ?) 
+            WHERE (user_id = $1 OR matched_user_id = $2) 
               AND status = 'completed'
         `;
-        const [exchangedRows] = await pool.execute(exchangedQuery, [userId, userId]);
+        // const [exchangedRows] = await pool.execute(exchangedQuery, [userId, userId]);
+        const { rows: exchangedRows } = await pool.query(exchangedQuery, [userId, userId]);
         const totalExchanged = parseFloat(exchangedRows[0].total) || 0;
 
         // Trust Score: Based on ratings
         const trustQuery = `
             SELECT AVG(stars) AS avg_stars
             FROM ratings 
-            WHERE rated_user_id = ?
+            WHERE rated_user_id = $1
         `;
-        const [trustRows] = await pool.execute(trustQuery, [userId]);
+        // const [trustRows] = await pool.execute(trustQuery, [userId]);
+        const { rows: trustRows } = await pool.query(trustQuery, [userId]);
         const avgStars = parseFloat(trustRows[0].avg_stars);
 
         let trustScoreNum = 100;
@@ -521,7 +584,8 @@ exports.getDashboardStats = async (req, res) => {
         const role = req.session.role || 'user';
 
         // Recovery progress
-        const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
+        // const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
+        const { rows: uRow } = await pool.query('SELECT recovery_progress FROM users WHERE id = $1', [userId]);
         const recoveryProgress = uRow.length > 0 ? uRow[0].recovery_progress : 0;
 
         res.status(200).json({ activeSwaps, totalExchanged, trustScore, role, avgStars, recoveryProgress });
@@ -547,16 +611,18 @@ exports.getActiveSwaps = async (req, res) => {
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE s.user_id = ? AND (s.status = 'active' OR s.status = 'open')
+            WHERE s.user_id = $1 AND (s.status = 'active' OR s.status = 'open')
             ORDER BY s.created_at DESC
         `;
-        const [parentRows] = await pool.execute(query, [userId]);
+        // const [parentRows] = await pool.execute(query, [userId]);
+        const { rows: parentRows } = await pool.query(query, [userId]);
         
         let allRows = [...parentRows];
 
         if (parentRows.length > 0) {
             const parentIds = parentRows.map(r => r.id);
-            const placeholders = parentIds.map(() => '?').join(',');
+            const placeholders = parentIds.map((_, i) => '$' + (i + 1)).join(',');
+            const placeholders2 = parentIds.map((_, i) => '$' + (i + 1 + parentIds.length)).join(',');
             const childQuery = `
                 SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
                 u1.name as creator_name, u2.name as matched_name,
@@ -565,9 +631,10 @@ exports.getActiveSwaps = async (req, res) => {
                 FROM swaps s 
                 LEFT JOIN users u1 ON s.user_id = u1.id 
                 LEFT JOIN users u2 ON s.matched_user_id = u2.id
-                WHERE (s.parent_swap_id IN (${placeholders}) OR s.matched_parent_swap_id IN (${placeholders}))
+                WHERE (s.parent_swap_id IN (${placeholders}) OR s.matched_parent_swap_id IN (${placeholders2}))
             `;
-            const [childRows] = await pool.execute(childQuery, [...parentIds, ...parentIds]);
+            // const [childRows] = await pool.execute(childQuery, [...parentIds, ...parentIds]);
+            const { rows: childRows } = await pool.query(childQuery, [...parentIds, ...parentIds]);
             
             // Avoid duplicate rows if a query returns overlapping data
             const existingIds = new Set(allRows.map(r => r.id));
@@ -628,11 +695,12 @@ JOIN users u1 ON m.requester_id = u1.id
 JOIN users u2 ON m.accepter_id = u2.id
 WHERE 
   (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confirmation')
-  AND (m.requester_id = ? OR m.accepter_id = ?)
+  AND (m.requester_id = $2 OR m.accepter_id = $3)
 ORDER BY m.created_at DESC;
         `;
         
-        const [rows1] = await pool.execute(query1, [currentUserId, currentUserId, currentUserId]);
+        // const [rows1] = await pool.execute(query1, [currentUserId, currentUserId, currentUserId]);
+        const { rows: rows1 } = await pool.query(query1, [currentUserId, currentUserId, currentUserId]);
 
         const query2 = `
 SELECT 
@@ -654,10 +722,11 @@ FROM swaps s
 LEFT JOIN users u1 ON s.user_id = u1.id
 LEFT JOIN users u2 ON s.matched_user_id = u2.id
 WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confirmation')
-AND (s.user_id = ? OR s.matched_user_id = ?)
+AND (s.user_id = $2 OR s.matched_user_id = $3)
 ORDER BY s.created_at DESC;
         `;
-        const [rows2] = await pool.execute(query2, [currentUserId, currentUserId, currentUserId]);
+        // const [rows2] = await pool.execute(query2, [currentUserId, currentUserId, currentUserId]);
+        const { rows: rows2 } = await pool.query(query2, [currentUserId, currentUserId, currentUserId]);
 
         const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
@@ -691,10 +760,11 @@ exports.getCompletedSwaps = async (req, res) => {
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE (s.user_id = ? OR s.matched_user_id = ?) AND s.status = 'completed'
+            WHERE (s.user_id = $1 OR s.matched_user_id = $2) AND s.status = 'completed'
             ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
-        const [rows] = await pool.execute(query, [userId, userId]);
+        // const [rows] = await pool.execute(query, [userId, userId]);
+        const { rows } = await pool.query(query, [userId, userId]);
 
         const swapsWithContext = rows.map(swap => {
             return {
@@ -728,8 +798,9 @@ exports.rateSwap = async (req, res) => {
     }
 
     try {
-        const checkQuery = 'SELECT status, user_id, matched_user_id FROM swaps WHERE id = ?';
-        const [rows] = await pool.execute(checkQuery, [swapId]);
+        // const checkQuery = 'SELECT status, user_id, matched_user_id FROM swaps WHERE id = ?';
+        // const [rows] = await pool.execute(checkQuery, [swapId]);
+        const { rows } = await pool.query('SELECT status, user_id, matched_user_id FROM swaps WHERE id = $1', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Swap request not found.' });
@@ -751,7 +822,8 @@ exports.rateSwap = async (req, res) => {
         }
 
         if (!isAuthorized || !ratedUserId) {
-            const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            // const [matchRows] = await pool.execute('SELECT requester_id, accepter_id FROM matches WHERE swap_id = ?', [swapId]);
+            const { rows: matchRows } = await pool.query('SELECT requester_id, accepter_id FROM matches WHERE swap_id = $1', [swapId]);
             if (matchRows.length > 0) {
                 const match = matchRows[0];
                 if (match.requester_id === userId || match.accepter_id === userId) {
@@ -770,21 +842,24 @@ exports.rateSwap = async (req, res) => {
         }
 
         // Check if user already rated this swap
-        const ratingCheckQuery = 'SELECT id FROM ratings WHERE swap_id = ? AND rater_user_id = ?';
-        const [ratingRows] = await pool.execute(ratingCheckQuery, [swapId, userId]);
+        // const ratingCheckQuery = 'SELECT id FROM ratings WHERE swap_id = ? AND rater_user_id = ?';
+        // const [ratingRows] = await pool.execute(ratingCheckQuery, [swapId, userId]);
+        const { rows: ratingRows } = await pool.query('SELECT id FROM ratings WHERE swap_id = $1 AND rater_user_id = $2', [swapId, userId]);
 
         if (ratingRows.length > 0) {
             return res.status(400).json({ error: 'You have already rated this swap.' });
         }
 
         const insertQuery = 'INSERT INTO ratings (swap_id, rater_user_id, rated_user_id, stars) VALUES (?, ?, ?, ?)';
-        await pool.execute(insertQuery, [swapId, userId, ratedUserId, stars]);
+        // await pool.execute(insertQuery, [swapId, userId, ratedUserId, stars]);
+        await pool.query('INSERT INTO ratings (swap_id, rater_user_id, rated_user_id, stars) VALUES ($1, $2, $3, $4)', [swapId, userId, ratedUserId, stars]);
 
         // Notify Rated User
         const msg = `You received a ${stars}-star rating from your recent swap partner.`;
         const title = 'New Rating';
         const type = 'rating';
-        await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, title, msg, type]);
+        // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, title, msg, type]);
+        await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [ratedUserId, title, msg, type]);
 
         // Emit Socket Event
         if (global.io) {
@@ -795,11 +870,13 @@ exports.rateSwap = async (req, res) => {
 
         // Email Notification
         try {
-            const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [ratedUserId]);
+            // const [userRows] = await pool.execute('SELECT email FROM users WHERE id = ?', [ratedUserId]);
+            const { rows: userRows } = await pool.query('SELECT email FROM users WHERE id = $1', [ratedUserId]);
             if (userRows.length > 0) {
                 // Calculate new trust score
-                const trustQuery = `SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?`;
-                const [trustRows] = await pool.execute(trustQuery, [ratedUserId]);
+                // const trustQuery = `SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = ?`;
+                // const [trustRows] = await pool.execute(trustQuery, [ratedUserId]);
+                const { rows: trustRows } = await pool.query('SELECT AVG(stars) AS avg_stars FROM ratings WHERE rated_user_id = $1', [ratedUserId]);
                 let avgStars = parseFloat(trustRows[0].avg_stars);
                 let newTrustScore = 100;
                 if (!isNaN(avgStars)) {
@@ -813,7 +890,8 @@ exports.rateSwap = async (req, res) => {
                     const warningTitle = 'Trust Score Warning';
                     
                     // 1. Save Notification
-                    await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, warningTitle, warningMsg, 'warning']);
+                    // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [ratedUserId, warningTitle, warningMsg, 'warning']);
+                    await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [ratedUserId, warningTitle, warningMsg, 'warning']);
                     
                     // 2. Socket Alert
                     if (global.io) {
@@ -846,8 +924,9 @@ exports.getNotifications = async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
 
     try {
-        const query = 'SELECT id, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50';
-        const [rows] = await pool.execute(query, [userId]);
+        // const query = 'SELECT id, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50';
+        // const [rows] = await pool.execute(query, [userId]);
+        const { rows } = await pool.query('SELECT id, message, is_read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [userId]);
         res.status(200).json(rows);
     } catch (error) {
         console.error('Error fetching notifications:', error);
@@ -862,8 +941,9 @@ exports.markNotificationRead = async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized.' });
 
     try {
-        const query = 'UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ?';
-        await pool.execute(query, [notifId, userId]);
+        // const query = 'UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ?';
+        // await pool.execute(query, [notifId, userId]);
+        await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2', [notifId, userId]);
         res.status(200).json({ message: 'Notification marked as read.' });
     } catch (error) {
         console.error('Error marking notification read:', error);
@@ -907,7 +987,8 @@ exports.getPartners = async (req, res) => {
         `;
         let queryParams = [oppositeType, userId];
 
-        const [matchRows] = await pool.execute(candidateQuery, queryParams);
+        // const [matchRows] = await pool.execute(candidateQuery, queryParams);
+        const { rows: matchRows } = await pool.query(candidateQuery, queryParams);
 
         const validPartners = matchRows.map(r => ({
             id: r.id,
@@ -935,7 +1016,8 @@ exports.confirmPartnerSelection = async (req, res) => {
     }
 
     try {
-        const [swapRows] = await pool.execute('SELECT type, remaining_amount, location, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
+        // const [swapRows] = await pool.execute('SELECT type, remaining_amount, location, status FROM swaps WHERE id = ? AND user_id = ?', [swapId, userId]);
+        const { rows: swapRows } = await pool.query('SELECT type, remaining_amount, location, status FROM swaps WHERE id = $1 AND user_id = $2', [swapId, userId]);
         if (swapRows.length === 0) return res.status(404).json({ error: 'Swap not found or unauthorized.' });
 
         const mySwap = swapRows[0];
@@ -952,7 +1034,8 @@ exports.confirmPartnerSelection = async (req, res) => {
 
             if (remainingNeeded <= 0) break; // Safety net
 
-            const [pRows] = await pool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "active"', [candidateId]);
+            // const [pRows] = await pool.execute('SELECT remaining_amount, user_id, status FROM swaps WHERE id = ? AND status = "active"', [candidateId]);
+            const { rows: pRows } = await pool.query('SELECT remaining_amount, user_id, status FROM swaps WHERE id = $1 AND status = \'active\'', [candidateId]);
             if (pRows.length === 0) continue; // Partner was taken
 
             const candidateSwap = pRows[0];
@@ -964,14 +1047,26 @@ exports.confirmPartnerSelection = async (req, res) => {
             const newCandidateRemaining = candidateRemaining - actualChunk;
             const candidateStatus = newCandidateRemaining <= 0 ? 'matched' : 'active';
 
+            /*
             await pool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time), is_selected = TRUE, selection_group_id = ?, partner_priority_rank = ? WHERE id = ?',
                 [newCandidateRemaining, candidateStatus, candidateStatus, selectionGroupId, i + 1, candidateId]
             );
+            */
+            await pool.query(
+                'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END, is_selected = TRUE, selection_group_id = $4, partner_priority_rank = $5 WHERE id = $6',
+                [newCandidateRemaining, candidateStatus, candidateStatus, selectionGroupId, i + 1, candidateId]
+            );
 
-            const [childResult] = await pool.execute(`
+            // const [childResult] = await pool.execute(`
+            //     INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+            //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+            // `, [
+            //     userId, mySwap.type, actualChunk, actualChunk, 0, mySwap.location, 'matched', candidateSwap.user_id, swapId, candidateId
+            // ]);
+            const { rows: childResultRows } = await pool.query(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10) RETURNING id
             `, [
                 userId, mySwap.type, actualChunk, actualChunk, 0, mySwap.location, 'matched', candidateSwap.user_id, swapId, candidateId
             ]);
@@ -979,7 +1074,7 @@ exports.confirmPartnerSelection = async (req, res) => {
             matchedChunks.push({
                 partnerId: candidateSwap.user_id,
                 chunkAmount: actualChunk,
-                childSwapId: childResult.insertId,
+                childSwapId: childResultRows[0].id,
                 candidateParentId: candidateId,
                 remainingNeededAfter: remainingNeeded - actualChunk
             });
@@ -988,8 +1083,14 @@ exports.confirmPartnerSelection = async (req, res) => {
         }
 
         const finalParentStatus = remainingNeeded <= 0 ? 'matched' : 'active';
+        /*
         await pool.execute(
             'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
+            [remainingNeeded, finalParentStatus, finalParentStatus, swapId]
+        );
+        */
+        await pool.query(
+            'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END WHERE id = $4',
             [remainingNeeded, finalParentStatus, finalParentStatus, swapId]
         );
 
@@ -1000,8 +1101,10 @@ exports.confirmPartnerSelection = async (req, res) => {
                 const chunkAmt = chunk.chunkAmount;
 
                 const msg = `Match Confirmed! ₹${chunkAmt} of a swap request has been locked with you!`;
-                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partner Selected', msg, 'match']);
-                await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [pId, 'Partner Selected', msg, 'match']);
+                // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [userId, 'Partner Selected', msg, 'match']);
+                // await pool.execute('INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)', [pId, 'Partner Selected', msg, 'match']);
+                await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [userId, 'Partner Selected', msg, 'match']);
+                await pool.query('INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)', [pId, 'Partner Selected', msg, 'match']);
 
                 if (global.io) {
                     global.io.to(`user_${userId}`).emit('notification', { title: 'Partner Selected', message: msg, type: 'match', created_at: new Date() });
@@ -1010,8 +1113,10 @@ exports.confirmPartnerSelection = async (req, res) => {
 
                 (async () => {
                     try {
-                        const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
-                        const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [pId]);
+                        // const [meRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [userId]);
+                        // const [partnerRows] = await pool.execute('SELECT email, name FROM users WHERE id = ?', [pId]);
+                        const { rows: meRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [userId]);
+                        const { rows: partnerRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [pId]);
 
                         if (meRows.length > 0 && partnerRows.length > 0) {
                             const me = meRows[0];
@@ -1020,7 +1125,8 @@ exports.confirmPartnerSelection = async (req, res) => {
 
                             await sendPartialMatchEmail(me.email, chunkAmt, chunk.remainingNeededAfter, partner.name, mySwap.type === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
 
-                            const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                            // const [pRow] = await pool.execute('SELECT remaining_amount FROM swaps WHERE id = ?', [chunk.candidateParentId]);
+                            const { rows: pRow } = await pool.query('SELECT remaining_amount FROM swaps WHERE id = $1', [chunk.candidateParentId]);
                             const partnerRem = pRow.length > 0 ? parseFloat(pRow[0].remaining_amount) : 0;
                             await sendPartialMatchEmail(partner.email, chunkAmt, partnerRem, me.name, oppositeType === 'need_cash' ? 'Need Cash' : 'Need UPI', mySwap.location);
                         }
@@ -1033,8 +1139,12 @@ exports.confirmPartnerSelection = async (req, res) => {
 
         // Reset notification state for the requester (current user)
         console.log("Resetting notification state for user after partner selection:", userId);
-        await pool.execute(
-            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+        // await pool.execute(
+        //     'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+        //     [userId]
+        // );
+        await pool.query(
+            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = $1',
             [userId]
         );
 
@@ -1059,15 +1169,22 @@ exports.getSwapFeed = async (req, res) => {
 
     try {
         // 1. Fetch user's auto_match preference and location details
-        const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
+        // const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
+        const { rows: userRows } = await pool.query('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = $1', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
         const userLat = userRows.length > 0 ? userRows[0].latitude : null;
         const userLng = userRows.length > 0 ? userRows[0].longitude : null;
         const userRadius = userRows.length > 0 ? (userRows[0].search_radius || 300) : 300;
 
         // 2. Fetch user's active swaps to identify potential "Best Matches"
+        /*
         const [myActiveSwaps] = await pool.execute(
             'SELECT amount, type FROM swaps WHERE user_id = ? AND (status = "active" OR status = "open")',
+            [userId]
+        );
+        */
+        const { rows: myActiveSwaps } = await pool.query(
+            'SELECT amount, type FROM swaps WHERE user_id = $1 AND (status = \'active\' OR status = \'open\')',
             [userId]
         );
 
@@ -1092,16 +1209,18 @@ exports.getSwapFeed = async (req, res) => {
               (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
             FROM swaps s
             JOIN users u ON s.user_id = u.id
-            WHERE (LCASE(s.status) = 'active' OR LCASE(s.status) = 'open') AND s.user_id != ?
+            FROM swaps s
+            JOIN users u ON s.user_id = u.id
+            WHERE (LOWER(s.status) = 'active' OR LOWER(s.status) = 'open') AND s.user_id != $1
         `;
 
         if (minAmount) {
-            query += " AND s.remaining_amount >= ?";
+            query += " AND s.remaining_amount >= $" + (queryParams.length + 1);
             queryParams.push(parseFloat(minAmount));
         }
 
         if (maxAmount) {
-            query += " AND s.remaining_amount <= ?";
+            query += " AND s.remaining_amount <= $" + (queryParams.length + 1);
             queryParams.push(parseFloat(maxAmount));
         }
 
@@ -1110,13 +1229,20 @@ exports.getSwapFeed = async (req, res) => {
         } else if (type === 'CASH') {
             query += " AND s.type = 'need_cash'";
         }
-
-        const [rows] = await pool.execute(query, queryParams);
+        
+        // const [rows] = await pool.execute(query, queryParams);
+        const { rows } = await pool.query(query, queryParams);
 
         // Fetch userAmount for sorting
         let userAmount = 0;
+        /*
         const [lastReqRows] = await pool.execute(
             'SELECT amount FROM swaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+            [userId]
+        );
+        */
+        const { rows: lastReqRows } = await pool.query(
+            'SELECT amount FROM swaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
             [userId]
         );
         if (lastReqRows.length > 0) {
@@ -1247,7 +1373,8 @@ exports.acceptSwap = async (req, res) => {
             return res.status(401).json({ error: "User not authenticated" });
         }
 
-        const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        // const [swapRows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const { rows: swapRows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
         const swap = swapRows.length > 0 ? swapRows[0] : null;
 
         if (!swap) {
@@ -1267,7 +1394,8 @@ exports.acceptSwap = async (req, res) => {
 
         if (mode === 'continue' && parentSwapId) {
             // --- PARTIAL MERGE LOGIC ---
-            const [pRows] = await pool.execute('SELECT * FROM swaps WHERE id = ? AND user_id = ?', [parentSwapId, currentUserId]);
+            // const [pRows] = await pool.execute('SELECT * FROM swaps WHERE id = ? AND user_id = ?', [parentSwapId, currentUserId]);
+            const { rows: pRows } = await pool.query('SELECT * FROM swaps WHERE id = $1 AND user_id = $2', [parentSwapId, currentUserId]);
             if (pRows.length === 0) return res.status(404).json({ error: "Parent swap not found" });
             
             const parentSwap = pRows[0];
@@ -1282,35 +1410,58 @@ exports.acceptSwap = async (req, res) => {
             const newRemaining = parentRemaining - matchAmount;
             const newParentStatus = newRemaining <= 0 ? 'matched' : 'active';
             
+            /*
             await pool.execute(
                 'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
                 [newRemaining, newParentStatus, newParentStatus, parentSwapId]
             );
+            */
+            await pool.query(
+                'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END WHERE id = $4',
+                [newRemaining, newParentStatus, newParentStatus, parentSwapId]
+            );
 
             // Create a new child swap for User B to represent this match
+            /*
             const [childResult] = await pool.execute(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
             `, [
                 currentUserId, parentSwap.type, matchAmount, matchAmount, 0, parentSwap.location, 'matched', swap.user_id, parentSwapId, swapId
             ]);
+            */
+            const { rows: childResultRows } = await pool.query(`
+                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10) RETURNING id
+            `, [
+                currentUserId, parentSwap.type, matchAmount, matchAmount, 0, parentSwap.location, 'matched', swap.user_id, parentSwapId, swapId
+            ]);
             
-            myFinalSwapId = childResult.insertId;
+            myFinalSwapId = childResultRows[0].id;
             console.log(`Merged match into existing swap ${parentSwapId}. New child swap: ${myFinalSwapId}`);
 
         } else {
             // --- CREATE NEW (Standard Logic) ---
             const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
+            /*
             const [childResult] = await pool.execute(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, matched_parent_swap_id) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
             `, [
                 currentUserId, oppositeType, swap.amount, swap.amount, 0, swap.location, 'matched', swap.user_id, swapId
             ]);
-            myFinalSwapId = childResult.insertId;
+            */
+            const { rows: childResultRows } = await pool.query(`
+                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, matched_parent_swap_id) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9) RETURNING id
+            `, [
+                currentUserId, oppositeType, swap.amount, swap.amount, 0, swap.location, 'matched', swap.user_id, swapId
+            ]);
+            myFinalSwapId = childResultRows[0].id;
         }
 
         // Update the requester's swap (the one being accepted)
+        /*
         await pool.execute(`
           UPDATE swaps
           SET status = 'matched',
@@ -1318,8 +1469,17 @@ exports.acceptSwap = async (req, res) => {
               match_time = NOW()
           WHERE id = ?
         `, [currentUserId, swapId]);
+        */
+        await pool.query(`
+          UPDATE swaps
+          SET status = 'matched',
+              matched_user_id = $1,
+              match_time = NOW()
+          WHERE id = $2
+        `, [currentUserId, swapId]);
 
         // Insert into matches table for convenience
+        /*
         await pool.execute(`
           INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
           VALUES (?, ?, ?, ?, NOW())
@@ -1329,17 +1489,33 @@ exports.acceptSwap = async (req, res) => {
           currentUserId,
           "matched"
         ]);
+        */
+        await pool.query(`
+          INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
+          VALUES ($1, $2, $3, $4, NOW())
+        `, [
+          swapId,
+          swap.user_id,
+          currentUserId,
+          "matched"
+        ]);
 
         console.log("Resetting notification state for user:", currentUserId);
-        await pool.execute(
-            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+        // await pool.execute(
+        //     'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = ?',
+        //     [currentUserId]
+        // );
+        await pool.query(
+            'UPDATE users SET last_best_match_score = 0, last_notified_at = NULL WHERE id = $1',
             [currentUserId]
         );
 
         // --- NEW: Send Email Notifications to both parties ---
         try {
-            const [requesterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [swap.user_id]);
-            const [accepterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [currentUserId]);
+            // const [requesterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [swap.user_id]);
+            // const [accepterRows] = await pool.execute('SELECT name, email FROM users WHERE id = ?', [currentUserId]);
+            const { rows: requesterRows } = await pool.query('SELECT name, email FROM users WHERE id = $1', [swap.user_id]);
+            const { rows: accepterRows } = await pool.query('SELECT name, email FROM users WHERE id = $1', [currentUserId]);
 
             if (requesterRows.length > 0 && accepterRows.length > 0) {
                 const requester = requesterRows[0];
@@ -1398,7 +1574,8 @@ exports.deleteSwap = async (req, res) => {
 
     try {
         // 1. Find the swap
-        const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        // const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const { rows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Swap request not found.' });
@@ -1420,7 +1597,8 @@ exports.deleteSwap = async (req, res) => {
         }
 
         // 4. Perform deletion
-        await pool.execute('DELETE FROM swaps WHERE id = ?', [swapId]);
+        // await pool.execute('DELETE FROM swaps WHERE id = ?', [swapId]);
+        await pool.query('DELETE FROM swaps WHERE id = $1', [swapId]);
 
         res.json({ success: true, message: 'Swap deleted successfully.' });
 
@@ -1482,10 +1660,17 @@ exports.updateSwap = async (req, res) => {
         // We update type, amount, total_amount, remaining_amount
         // created_at is updated to NOW() to "update the posted time"
         // is_edited is set to TRUE for the frontend label
+        /*
         await pool.execute(`
             UPDATE swaps 
             SET type = ?, amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
             WHERE id = ?
+        `, [type, amount, amount, amount, location, swapId]);
+        */
+        await pool.query(`
+            UPDATE swaps 
+            SET type = $1, amount = $2, total_amount = $3, remaining_amount = $4, location = $5, created_at = NOW(), is_edited = TRUE 
+            WHERE id = $6
         `, [type, amount, amount, amount, location, swapId]);
 
         res.json({ success: true, message: 'Swap updated successfully.' });
