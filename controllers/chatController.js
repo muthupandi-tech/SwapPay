@@ -95,7 +95,7 @@ const chatController = {
             const insertId = insertRows[0].id;
 
             // Fetch back to return complete object including timestamp & sender name
-            const [newMessage] = await pool.execute(`
+            const queryFetch = `
                 SELECT 
                     cm.id, cm.swap_id, cm.sender_id, cm.message, cm.created_at, cm.status,
                     u.name as sender_name
@@ -103,10 +103,10 @@ const chatController = {
                 JOIN users u ON cm.sender_id = u.id
                 WHERE cm.id = $1
             `;
-            // const [newMessage] = await pool.execute(queryFetch, [result.insertId]);
-            const { rows: newMessage } = await pool.query(queryFetch, [insertId]);
+            // const [newMessageRows] = await pool.execute(queryFetch, [insertId]);
+            const { rows: newMessageRows } = await pool.query(queryFetch, [insertId]);
 
-            const savedMsg = newMessage[0];
+            const savedMsg = newMessageRows[0];
             savedMsg.receiverId = receiverId; // Add receiverId for server.js to use
             return savedMsg;
         } catch (error) {
