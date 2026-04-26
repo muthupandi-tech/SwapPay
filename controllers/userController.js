@@ -140,7 +140,7 @@ exports.updateLocation = async (req, res) => {
         const { lat, lng } = req.body;
 
         if (lat === undefined || lng === undefined) {
-            return res.status(400).json({ error: 'Latitude and Longitude are required.' });
+            return res.status(400).json({ error: 'latitude and longitude are required.' });
         }
 
         // await pool.execute(
@@ -167,19 +167,19 @@ exports.postLocation = async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized.' });
         }
 
-        const { latitude, longitude } = req.body;
+        const { lat, lng } = req.body;
 
-        if (latitude === undefined || longitude === undefined) {
-            return res.status(400).json({ error: 'latitude and longitude are required.' });
+        if (lat === undefined || lng === undefined) {
+            return res.status(400).json({ error: 'lat and lng are required.' });
         }
 
         // await pool.execute(
-        //     'UPDATE users SET latitude = ?, longitude = ? WHERE id = ?',
-        //     [latitude, longitude, userId]
+        //     'UPDATE users SET lat = ?, lng = ? WHERE id = ?',
+        //     [lat, lng, userId]
         // );
         await pool.query(
             'UPDATE users SET lat = $1, lng = $2 WHERE id = $3',
-            [latitude, longitude, userId]
+            [lat, lng, userId]
         );
 
         res.json({ success: true, message: 'Location updated successfully.' });

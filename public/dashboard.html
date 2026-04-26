@@ -2765,7 +2765,7 @@
                         fetch("/api/user/location", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ latitude: lat, longitude: lng })
+                            body: JSON.stringify({ lat: lat, lng: lng })
                         });
                     },
                     (err) => {

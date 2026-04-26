@@ -27,19 +27,19 @@ exports.createSwap = async (req, res) => {
         const parsedAmount = parseFloat(amount);
 
         // --- NEW: Respect User's auto_match preference and fetch location ---
-        // const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude FROM users WHERE id = ?', [userId]);
-        const { rows: userRows } = await pool.query('SELECT auto_match, latitude, longitude FROM users WHERE id = $1', [userId]);
+        // const [userRows] = await pool.execute('SELECT auto_match, lat, lng FROM users WHERE id = ?', [userId]);
+        const { rows: userRows } = await pool.query('SELECT auto_match, lat, lng FROM users WHERE id = $1', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
-        const userLat = userRows.length > 0 ? userRows[0].latitude : null;
-        const userLng = userRows.length > 0 ? userRows[0].longitude : null;
+        const userLat = userRows.length > 0 ? userRows[0].lat : null;
+        const userLng = userRows.length > 0 ? userRows[0].lng : null;
 
         // 1. Insert the PARENT swap request initially
         /*
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, lat, lng, is_partial) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         const [result] = await pool.execute(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
         const newParentSwapId = result.insertId;
         */
-        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, latitude, longitude, is_partial) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id';
+        const insertQuery = 'INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, allow_partial_match, allow_partner_selection, auto_accept_perfect, lat, lng, is_partial) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id';
         const { rows: insertRows } = await pool.query(insertQuery, [userId, type, parsedAmount, parsedAmount, parsedAmount, location, 'active', isPartialAllowed, isPartnerSelection, isAutoAcceptPerfect, userLat, userLng, isPartialAllowed]);
         const newParentSwapId = insertRows[0].id;
 
@@ -175,14 +175,15 @@ exports.createSwap = async (req, res) => {
                 // Create CHILD SWAP representing the exact match chunk
                 /*
                 const [childResult] = await pool.execute(`
-                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, lat, lng) 
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, lat, lng) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
                 `, [
                     userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id, userLat, userLng
                 ]);
                 */
                 const { rows: childResult } = await pool.query(`
-                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, latitude, longitude) 
+                    INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id, lat, lng) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12) RETURNING id
                 `, [
                     userId, type, chunkAmount, chunkAmount, 0, location, 'matched', candidate.user_id, newParentSwapId, candidate.id, userLat, userLng
@@ -604,7 +605,7 @@ exports.getActiveSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -624,7 +625,7 @@ exports.getActiveSwaps = async (req, res) => {
             const placeholders = parentIds.map((_, i) => '$' + (i + 1)).join(',');
             const placeholders2 = parentIds.map((_, i) => '$' + (i + 1 + parentIds.length)).join(',');
             const childQuery = `
-                SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
+                SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
                 u1.name as creator_name, u2.name as matched_name,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -688,7 +689,7 @@ SELECT
   s.location,
   u1.name AS requester_name,
   u2.name AS accepter_name,
-  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = m.swap_id AND cm.sender_id != ? AND cm.status != 'seen') AS unread_count
+  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = m.swap_id AND cm.sender_id != $1 AND cm.status != 'seen') AS unread_count
 FROM matches m
 JOIN swaps s ON m.swap_id = s.id
 JOIN users u1 ON m.requester_id = u1.id
@@ -717,7 +718,7 @@ SELECT
   s.location,
   u1.name AS requester_name,
   u2.name AS accepter_name,
-  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = s.id AND cm.sender_id != ? AND cm.status != 'seen') AS unread_count
+  (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = s.id AND cm.sender_id != $1 AND cm.status != 'seen') AS unread_count
 FROM swaps s
 LEFT JOIN users u1 ON s.user_id = u1.id
 LEFT JOIN users u2 ON s.matched_user_id = u2.id
@@ -753,7 +754,7 @@ exports.getCompletedSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -980,8 +981,8 @@ exports.getPartners = async (req, res) => {
             FROM swaps s 
             JOIN users u ON s.user_id = u.id
             WHERE s.status = 'active' 
-              AND s.type = ? 
-              AND s.user_id != ? 
+              AND s.type = $1 
+              AND s.user_id != $2 
               AND s.remaining_amount > 0
             ORDER BY s.created_at ASC LIMIT 50
         `;
@@ -1169,11 +1170,11 @@ exports.getSwapFeed = async (req, res) => {
 
     try {
         // 1. Fetch user's auto_match preference and location details
-        // const [userRows] = await pool.execute('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = ?', [userId]);
-        const { rows: userRows } = await pool.query('SELECT auto_match, latitude, longitude, search_radius FROM users WHERE id = $1', [userId]);
+        // const [userRows] = await pool.execute('SELECT auto_match, lat, lng, search_radius FROM users WHERE id = ?', [userId]);
+        const { rows: userRows } = await pool.query('SELECT auto_match, lat, lng, search_radius FROM users WHERE id = $1', [userId]);
         const userAutoMatch = userRows.length > 0 ? (userRows[0].auto_match === 1 || userRows[0].auto_match === true) : true;
-        const userLat = userRows.length > 0 ? userRows[0].latitude : null;
-        const userLng = userRows.length > 0 ? userRows[0].longitude : null;
+        const userLat = userRows.length > 0 ? userRows[0].lat : null;
+        const userLng = userRows.length > 0 ? userRows[0].lng : null;
         const userRadius = userRows.length > 0 ? (userRows[0].search_radius || 300) : 300;
 
         // 2. Fetch user's active swaps to identify potential "Best Matches"
@@ -1198,8 +1199,8 @@ exports.getSwapFeed = async (req, res) => {
               s.id,
               s.user_id,
               u.name,
-              s.latitude as creator_lat,
-              s.longitude as creator_lng,
+              s.lat as creator_lat,
+              s.lng as creator_lng,
               s.remaining_amount as amount,
               s.type,
               s.status,
@@ -1207,8 +1208,6 @@ exports.getSwapFeed = async (req, res) => {
               s.location,
               s.created_at,
               (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
-            FROM swaps s
-            JOIN users u ON s.user_id = u.id
             FROM swaps s
             JOIN users u ON s.user_id = u.id
             WHERE (LOWER(s.status) = 'active' OR LOWER(s.status) = 'open') AND s.user_id != $1
@@ -1574,7 +1573,7 @@ exports.deleteSwap = async (req, res) => {
 
     try {
         // 1. Find the swap
-        // const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        // const { rows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
         const { rows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
 
         if (rows.length === 0) {
@@ -1627,7 +1626,7 @@ exports.updateSwap = async (req, res) => {
 
     try {
         // 1. Find the swap
-        const [rows] = await pool.execute('SELECT * FROM swaps WHERE id = ?', [swapId]);
+        const { rows } = await pool.query('SELECT * FROM swaps WHERE id = $1', [swapId]);
 
         if (rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Swap request not found.' });
@@ -1661,10 +1660,10 @@ exports.updateSwap = async (req, res) => {
         // created_at is updated to NOW() to "update the posted time"
         // is_edited is set to TRUE for the frontend label
         /*
-        await pool.execute(`
+        await pool.query(`
             UPDATE swaps 
-            SET type = ?, amount = ?, total_amount = ?, remaining_amount = ?, location = ?, created_at = NOW(), is_edited = TRUE 
-            WHERE id = ?
+            SET type = $1, amount = $2, total_amount = $3, remaining_amount = $4, location = $5, created_at = NOW(), is_edited = TRUE 
+            WHERE id = $6
         `, [type, amount, amount, amount, location, swapId]);
         */
         await pool.query(`

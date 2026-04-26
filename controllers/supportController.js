@@ -24,6 +24,8 @@ const pool = new Pool({
     }
 });
 
+const emailService = require('../utils/emailService');
+
 exports.submitFeedback = async (req, res) => {
     const userId = req.session.userId;
     if (!userId) {
@@ -50,17 +52,21 @@ exports.submitFeedback = async (req, res) => {
     }
 
     try {
-        /*
-        const [result] = await pool.execute(
-            'INSERT INTO feedbacks (user_id, type, category, message, rating) VALUES (?, ?, ?, ?, ?)',
-            [userId, type, category || null, message.trim(), type === 'feedback' ? rating : null]
-        );
-        res.status(201).json({ success: true, message: 'Thanks for your feedback ❤️', feedbackId: result.insertId });
-        */
+        // Fetch user details for the email
+        const { rows: userRows } = await pool.query('SELECT name, email FROM users WHERE id = $1', [userId]);
+        const user = userRows[0];
+
         const { rows } = await pool.query(
             'INSERT INTO feedbacks (user_id, type, category, message, rating) VALUES ($1, $2, $3, $4, $5) RETURNING id',
             [userId, type, category || null, message.trim(), type === 'feedback' ? rating : null]
         );
+
+        // Send email to admin asynchronously (don't block the response)
+        if (user) {
+            emailService.sendFeedbackEmailToAdmin(user.name, user.email, type, category, message.trim(), type === 'feedback' ? rating : null)
+                .catch(err => console.error('Background Email Error:', err));
+        }
+
         res.status(201).json({ success: true, message: 'Thanks for your feedback ❤️', feedbackId: rows[0].id });
     } catch (error) {
         console.error('Error submitting feedback:', error);

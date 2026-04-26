@@ -697,6 +697,42 @@ async function sendContactEmail(name, email, message) {
 }
 
 /**
+ * Send Feedback/Issue Email to Admin
+ */
+async function sendFeedbackEmailToAdmin(userName, userEmail, type, category, message, rating) {
+    const t = await getTransporter();
+
+    const title = type === 'issue' ? "🚨 New Support Issue Reported" : "📝 New Feedback Received";
+    const starRating = rating ? `Rating: ${'⭐'.repeat(rating)}` : '';
+
+    const content = `
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+            <p><strong>From:</strong> ${userName} (${userEmail})</p>
+            <p><strong>Type:</strong> ${type.toUpperCase()}</p>
+            <p><strong>Category:</strong> ${category || 'N/A'}</p>
+            ${starRating ? `<p><strong>${starRating}</strong></p>` : ''}
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 15px 0;" />
+            <p style="white-space: pre-wrap; color: #1e293b;">${message}</p>
+        </div>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Support" <${senderEmail}>`,
+        to: "swappay.official@gmail.com",
+        subject: `[${type.toUpperCase()}] ${category || 'General'} - from ${userName}`,
+        html: getEmailTemplateWrapper(title, content),
+        replyTo: userEmail
+    };
+
+    try {
+        await t.sendMail(mailOptions);
+        console.log(`[Email Service] Feedback email sent to admin from ${userEmail}`);
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send feedback email to admin:`, error);
+    }
+}
+
+/**
  * Reset Password Email Template
  */
 async function sendResetPasswordEmail(toEmail, token) {
@@ -768,5 +804,6 @@ module.exports = {
     sendOTPEmail,
     sendTrustWarningEmail,
     sendContactEmail,
+    sendFeedbackEmailToAdmin,
     sendResetPasswordEmail
 };

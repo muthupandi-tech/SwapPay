@@ -332,8 +332,12 @@ exports.resetPassword = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         /*
-        await pool.execute(
-            'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
+        // await pool.execute(
+        //    'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
+        //    [hashedPassword, user.id]
+        // );
+        await pool.query(
+            'UPDATE users SET password = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2',
             [hashedPassword, user.id]
         );
         */

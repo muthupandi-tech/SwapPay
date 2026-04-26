@@ -180,7 +180,7 @@ exports.generateReport = async (req, res) => {
 exports.getAllSwaps = async (req, res) => {
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.latitude, s.longitude, s.completed_at, s.created_at, s.is_edited,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
             u1.name as creator_name, u2.name as matched_name 
             FROM swaps s 
             LEFT JOIN users u1 ON s.user_id = u1.id 
@@ -279,9 +279,7 @@ exports.updateSettings = async (req, res) => {
             return res.status(400).json({ error: 'Setting key and value are required.' });
         }
 
-        /*
-        await pool.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [key, value, value]);
-        */
+        // await pool.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [key, value, value]);
         await pool.query("INSERT INTO settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value", [key, value]);
         res.json({ message: 'Settings updated successfully' });
     } catch (error) {
