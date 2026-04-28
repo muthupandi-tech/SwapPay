@@ -750,8 +750,8 @@ ORDER BY s.created_at DESC;
         `;
         const { rows: rows2 } = await pool.query(query2, [currentUserId, currentUserId, currentUserId]);
 
-        const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
-        const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
+        const swapIdsInMatches = new Set(rows1.map(r => String(r.swap_id)));
+        const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(String(r.swap_id)));
 
         const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
         const matchesWithContext = matches.map(m => {

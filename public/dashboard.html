@@ -1700,8 +1700,7 @@
                 } else if (swap.status === 'completed') {
                     actionArea = `
                         <div class="status-text success">Completed</div>
-                        <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem;">Completed</button>
-                        ${(swap.matched_user_id || !swap.is_partial) ? `<button class="btn-accept-swap" onclick="openRatingModal(${swap.id})" style="margin-top: 0.5rem; background: rgba(255,159,67,0.1); border: 1px solid #ff9f43; color: #ff9f43;">Review this Swap</button>` : ''}
+                        ${(swap.matched_user_id || !swap.is_partial) ? `<button class="btn-accept-swap" onclick="openRatingModal(${swap.id})" style="margin-top: 1rem; background: rgba(255,159,67,0.1); border: 1px solid #ff9f43; color: #ff9f43;">Review this Swap</button>` : ''}
                     `;
                 }
             } else {
@@ -1715,9 +1714,7 @@
 
             let timeStrHTML = `<span>Posted:</span> <strong>${formatRelativeDate(swap.created_at)}</strong>`;
             if (swap.status === 'completed' || currentTab === 'completed') {
-                const cDate = new Date(swap.completed_at || swap.created_at);
-                const formatOpts = { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true };
-                timeStrHTML = `<span>Completed:</span> <strong>${cDate.toLocaleString("en-IN", formatOpts)}</strong>`;
+                timeStrHTML = `<span>Completed:</span> <strong>${formatISTDate(swap.completed_at || swap.created_at)}</strong>`;
             }
 
             // Use remaining_amount only for active/open swaps. For matched/completed, show the match amount.
@@ -1770,11 +1767,26 @@
             loadMySwaps();
         };
 
+        function getCorrectedDate(dateStr) {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return new Date();
+            // Fix timezone shift from backend (UTC parsed as local)
+            d.setMinutes(d.getMinutes() + 330);
+            return d;
+        }
+
+        function formatISTDate(dateStr) {
+            if (!dateStr) return '';
+            const d = getCorrectedDate(dateStr);
+            const formatOpts = { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: 'Asia/Kolkata' };
+            return d.toLocaleString("en-IN", formatOpts);
+        }
+
         function formatRelativeDate(dateStr) {
-            const date = new Date(dateStr);
+            const date = getCorrectedDate(dateStr);
             const now = new Date();
             const diffMs = now - date;
-            if (diffMs < 0) return 'Just now'; // sanity check
+            if (diffMs < 0) return 'Just now';
             const diffMins = Math.floor(diffMs / 60000);
             
             if (diffMins < 1) return 'Just now';
@@ -1788,12 +1800,11 @@
             if (targetDate.getTime() === today.getTime()) return 'Today';
             if (targetDate.getTime() === yesterday.getTime()) return 'Yesterday';
             
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return formatISTDate(dateStr);
         }
         
         function getDateGroupHeader(dateStr) {
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return 'Earlier';
+            const date = getCorrectedDate(dateStr);
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const yesterday = new Date(today);
@@ -1857,7 +1868,7 @@
                 } else {
                     const groupedSwaps = Object.values(parents);
                     baseItems = groupedSwaps.filter(swap => {
-                        if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open' || swap.status === 'matched' || swap.status === 'pending_confirmation' || swap.status === 'MATCHED');
+                        if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open');
                         return true;
                     });
                 }
@@ -2210,8 +2221,9 @@
             if (e.target.classList.contains("accept-btn")) {
                 const swapId = e.target.dataset.id;
                 const matchAmount = parseFloat(e.target.dataset.amount || '0');
-                const swapTypeBadge = card.querySelector('.swap-type-badge');
-                const neededType = swapTypeBadge.innerText.includes('Cash') ? 'need_cash' : 'need_upi'; // Requester needs this
+                const card = e.target.closest('.swap-card');
+                const swapTypeBadge = card ? card.querySelector('.swap-type-badge') : null;
+                const neededType = swapTypeBadge && swapTypeBadge.innerText.includes('Cash') ? 'need_cash' : 'need_upi'; // Requester needs this
                 const myRequiredType = neededType === 'need_cash' ? 'need_upi' : 'need_cash'; // I must provide this
 
                 console.log("Accept swap:", swapId, "Amount:", matchAmount, "My Type:", myRequiredType);
@@ -2271,7 +2283,7 @@
             });
             el.style.borderColor = 'var(--accent-secondary)';
             el.style.background = 'rgba(232, 67, 147, 0.05)';
-            el.querySelector('> div').innerHTML += '<span style="color: var(--accent-secondary); font-size: 1.2rem;">✓</span>';
+            el.firstElementChild.innerHTML += '<span style="color: var(--accent-secondary); font-size: 1.2rem;">✓</span>';
         };
 
         window.closeMergingModal = function() {
@@ -2644,11 +2656,12 @@
             }
 
             // Sound
-            if (userNotificationSettings.sound) {
-                const audio = new Audio("/notification.mp3");
-                audio.volume = 0.5;
-                audio.play().catch(() => {});
-            }
+            // Sound (Disabled to prevent 404 errors as notification.mp3 is missing)
+            // if (userNotificationSettings.sound) {
+            //     const audio = new Audio("/notification.mp3");
+            //     audio.volume = 0.5;
+            //     audio.play().catch(() => {});
+            // }
 
             // Vibration (mobile only)
             if (userNotificationSettings.vibration && navigator.vibrate) {
