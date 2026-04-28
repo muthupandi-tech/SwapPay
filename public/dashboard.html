@@ -1998,6 +1998,8 @@
         <div style="width: ${progressPercent}%; height: 100%; background: var(--accent-secondary);"></div>
     </div>
     
+    ${remaining > 0 ? `<button class="btn-accept-swap" onclick="openPartnerSelection(${parentSwap.id}, ${remaining}, '${parentSwap.type}')" style="margin-bottom: 1.5rem; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-primary); color: var(--accent-primary);">View Available Partners for Remaining ₹${remaining}</button>` : ''}
+    
     <h4 style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Matched Contributors (${parentSwap.childChunks.length})</h4>
     <div class="swaps-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
         ${chunksHtml}
@@ -2493,7 +2495,7 @@
                     if (data.status === 'pending_confirmation') {
                         alert('Waiting for partner to confirm...');
                     } else if (data.status === 'completed') {
-                        showToast('Swap successfully marked as completed!', '✅');
+                        // showToast('Swap successfully marked as completed!', '✅'); // Handled by WebSocket
                         openRatingModal(swapId);
                     } else {
                         showToast(data.message || 'Swap successfully marked as completed!', '✅');

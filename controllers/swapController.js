@@ -514,7 +514,7 @@ exports.completeSwap = async (req, res) => {
                     }
                 }
             }
-
+            return res.status(200).json({ success: true, status: 'completed' });
         } else {
             // Only one has completed, waiting for partner
             const partnerId = (swap.user_id === userId) ? swap.matched_user_id : swap.user_id;
@@ -694,6 +694,8 @@ SELECT
   m.requester_id,
   m.accepter_id,
   s.status,
+  s.parent_swap_id,
+  s.matched_parent_swap_id,
   s.is_edited,
   s.creator_completed,
   s.acceptor_completed,
@@ -726,13 +728,14 @@ SELECT
   s.user_id AS requester_id,
   s.matched_user_id AS accepter_id,
   s.status,
+  s.allow_partial_match,
   s.is_edited,
   s.creator_completed,
   s.acceptor_completed,
   s.created_at AS posted_time,
   COALESCE(s.match_time, s.created_at) AS matched_time,
   s.amount,
-  s.type,
+  CASE WHEN s.type = 'need_cash' THEN 'need_upi' ELSE 'need_cash' END AS type,
   s.location,
   u1.name AS requester_name,
   u2.name AS accepter_name,
@@ -746,11 +749,22 @@ WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confi
 AND (s.user_id = $2 OR s.matched_user_id = $3)
 AND s.parent_swap_id IS NULL
 AND s.matched_user_id IS NOT NULL
+AND NOT EXISTS (
+  SELECT 1 FROM swaps child 
+  WHERE (child.parent_swap_id = s.id OR child.matched_parent_swap_id = s.id)
+    AND s.allow_partial_match = true
+)
 ORDER BY s.created_at DESC;
         `;
         const { rows: rows2 } = await pool.query(query2, [currentUserId, currentUserId, currentUserId]);
 
-        const swapIdsInMatches = new Set(rows1.map(r => String(r.swap_id)));
+        const swapIdsInMatches = new Set();
+        rows1.forEach(r => {
+            if (r.swap_id) swapIdsInMatches.add(String(r.swap_id));
+            if (r.parent_swap_id) swapIdsInMatches.add(String(r.parent_swap_id));
+            if (r.matched_parent_swap_id) swapIdsInMatches.add(String(r.matched_parent_swap_id));
+        });
+
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(String(r.swap_id)));
 
         const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
@@ -784,18 +798,20 @@ exports.getCompletedSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited, s.creator_completed, s.acceptor_completed,
-            u1.name as creator_name, u2.name as matched_name,
-            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
-            (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
-            FROM swaps s 
+            SELECT 
+              m.id AS match_id,
+              m.swap_id,
+              s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited, s.creator_completed, s.acceptor_completed,
+              u1.name as creator_name, u2.name as matched_name,
+              (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
+              (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
+            FROM matches m
+            JOIN swaps s ON m.swap_id = s.id
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
-            WHERE (s.user_id = $1 OR s.matched_user_id = $2) AND s.status = 'completed'
-            AND s.parent_swap_id IS NULL
+            WHERE (m.requester_id = $1 OR m.accepter_id = $2) AND m.status = 'completed'
             ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
-        // const [rows] = await pool.execute(query, [userId, userId]);
         const { rows } = await pool.query(query, [userId, userId]);
 
         const swapsWithContext = rows.map(swap => {
@@ -1251,7 +1267,7 @@ exports.getSwapFeed = async (req, res) => {
               s.is_edited,
               s.location,
               s.created_at,
-              (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as trustScore
+              (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u.id) as "trustScore"
             FROM swaps s
             JOIN users u ON s.user_id = u.id
             WHERE (LOWER(s.status) = 'active' OR LOWER(s.status) = 'open') AND s.user_id != $1
