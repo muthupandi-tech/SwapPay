@@ -237,6 +237,66 @@
         .btn-delete:hover { background: #991b1b; color: #fff; border-color: #ef4444; }
 
         .msg-cell { max-width: 300px; font-size: 0.9rem; line-height: 1.4; color: var(--text-secondary); }
+
+        /* Tabs Styling */
+        .tabs { display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem; }
+        .tab { 
+            padding: 10px 20px; 
+            cursor: pointer; 
+            color: var(--text-secondary); 
+            font-weight: 600; 
+            transition: 0.3s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -0.5rem;
+        }
+        .tab:hover { color: #fff; }
+        .tab.active { color: var(--accent-secondary); border-bottom-color: var(--accent-secondary); }
+
+        /* Modal Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #0f172a;
+            border: 1px solid var(--glass-border);
+            padding: 2.5rem;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .modal-header h2 { font-size: 1.5rem; }
+        .modal-body textarea {
+            width: 100%;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: #fff;
+            padding: 1rem;
+            font-family: inherit;
+            margin-bottom: 1.5rem;
+            resize: none;
+        }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 1rem; }
+        .btn-cancel { background: transparent; border: 1px solid var(--glass-border); }
+        .btn-send { background: var(--accent-secondary); color: #000; font-weight: 700; }
+        
+        /* Updated Badges */
+        .badge-replied { background: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+        .badge-in_progress { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     </style>
 </head>
 <body>
@@ -269,7 +329,7 @@
                     <div class="value" id="statTotal">-</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Technical Issues</h3>
+                    <h3>Pending Issues</h3>
                     <div class="value" id="statIssues">-</div>
                 </div>
                 <div class="stat-card">
@@ -278,26 +338,32 @@
                 </div>
             </div>
 
+            <div class="tabs">
+                <div class="tab active" onclick="setTab('all')" id="tabAll">All Submissions</div>
+                <div class="tab" onclick="setTab('feedback')" id="tabFeedback">⭐ Feedback</div>
+                <div class="tab" onclick="setTab('issue')" id="tabIssue">⚠️ Issues</div>
+            </div>
+
             <div class="controls">
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="Search by name or message..." oninput="renderTable()">
                 </div>
-                <select class="filter-select" id="typeFilter" onchange="renderTable()">
-                    <option value="">All Types</option>
-                    <option value="feedback">Feedback</option>
-                    <option value="issue">Issue</option>
-                </select>
                 <select class="filter-select" id="ratingFilter" onchange="renderTable()">
                     <option value="">All Ratings</option>
-                    <option value="5">5 Stars</option>
+                    <option value="5">5 Stars Only</option>
                     <option value="4">4+ Stars</option>
                     <option value="3">3+ Stars</option>
                 </select>
                 <select class="filter-select" id="statusFilter" onchange="renderTable()">
                     <option value="">All Status</option>
-                    <option value="open">Open</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
                     <option value="resolved">Resolved</option>
+                    <option value="replied">Replied</option>
                 </select>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-action" style="width: 100%;" onclick="loadFeedbacks()">Refresh</button>
+                </div>
             </div>
 
             <div class="feedback-table-container">
@@ -321,6 +387,25 @@
         </main>
     </div>
 
+    <!-- Reply Modal -->
+    <div class="modal" id="replyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Reply to Feedback</h2>
+                <button class="btn-action" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">To: <span id="replyToUser" style="color: #fff; font-weight: 600;"></span></p>
+                <textarea id="replyText" placeholder="Write your professional reply here..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-action btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-action btn-send" id="btnSubmitReply" onclick="submitReply()">Send Reply</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/js/main.js"></script>
     <script>
         // Adjust hamburger toggle for sidebar
@@ -335,6 +420,8 @@
         });
 
         let allFeedbacks = [];
+        let currentTab = 'all';
+        let currentReplyId = null;
 
         async function loadFeedbacks() {
             try {
@@ -349,9 +436,18 @@
             }
         }
 
+        function setTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            if (tab === 'all') document.getElementById('tabAll').classList.add('active');
+            if (tab === 'feedback') document.getElementById('tabFeedback').classList.add('active');
+            if (tab === 'issue') document.getElementById('tabIssue').classList.add('active');
+            renderTable();
+        }
+
         function updateStats() {
             document.getElementById('statTotal').innerText = allFeedbacks.length;
-            const issues = allFeedbacks.filter(f => f.type === 'issue').length;
+            const issues = allFeedbacks.filter(f => f.type === 'issue' && f.status === 'pending').length;
             document.getElementById('statIssues').innerText = issues;
             
             const withRatings = allFeedbacks.filter(f => f.rating);
@@ -362,16 +458,21 @@
         function renderTable() {
             const tableBody = document.getElementById('feedbackTableBody');
             const search = document.getElementById('searchInput').value.toLowerCase();
-            const typeF = document.getElementById('typeFilter').value;
             const ratingF = document.getElementById('ratingFilter').value;
             const statusF = document.getElementById('statusFilter').value;
 
-            const filtered = allFeedbacks.filter(f => {
-                const matchesSearch = f.user_name.toLowerCase().includes(search) || f.message.toLowerCase().includes(search);
-                const matchesType = !typeF || f.type === typeF;
+            const sorted = [...allFeedbacks].sort((a, b) => {
+                if (a.type === 'issue' && a.status === 'pending' && b.status !== 'pending') return -1;
+                if (b.type === 'issue' && b.status === 'pending' && a.status !== 'pending') return 1;
+                return new Date(b.created_at) - new Date(a.created_at);
+            });
+
+            const filtered = sorted.filter(f => {
+                const matchesTab = currentTab === 'all' || f.type === currentTab;
+                const matchesSearch = f.user_name.toLowerCase().includes(search) || (f.message && f.message.toLowerCase().includes(search));
                 const matchesRating = !ratingF || (f.rating && f.rating >= parseInt(ratingF));
                 const matchesStatus = !statusF || f.status === statusF;
-                return matchesSearch && matchesType && matchesRating && matchesStatus;
+                return matchesTab && matchesSearch && matchesRating && matchesStatus;
             });
 
             tableBody.innerHTML = '';
@@ -382,27 +483,48 @@
 
             filtered.forEach(f => {
                 const date = new Date(f.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-                const typeBadge = `<span class="badge badge-${f.type}">${f.type}</span>`;
-                const statusBadge = `<span class="badge badge-${f.status || 'open'}">${f.status || 'open'}</span>`;
+                const icon = f.type === 'issue' ? '⚠️' : '⭐';
+                const typeBadge = `<span class="badge badge-${f.type}">${icon} ${f.type}</span>`;
                 const category = f.category ? `<br><small style="color: var(--text-secondary)">${f.category}</small>` : '';
+                
+                let statusBadge = '';
+                let actionsHtml = '';
 
-                const resolveBtn = (f.status === 'open' || !f.status) ? 
-                    `<button class="btn-action btn-resolve" onclick="updateStatus(${f.id}, 'resolved')">Resolve</button>` : '';
+                if (f.type === 'issue') {
+                    statusBadge = `<span class="badge badge-${f.status || 'pending'}">${f.status || 'pending'}</span>`;
+                    
+                    const statusOptions = ['pending', 'in_progress', 'resolved', 'replied']
+                        .map(s => `<option value="${s}" ${f.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`)
+                        .join('');
+
+                    actionsHtml = `
+                        <select class="btn-action" onchange="updateStatus(${f.id}, this.value)" style="padding: 4px 8px;">
+                            ${statusOptions}
+                        </select>
+                        <button class="btn-action btn-resolve" onclick="openReplyModal(${f.id}, '${f.user_name}')" title="Reply">✉️</button>
+                    `;
+                } else {
+                    statusBadge = `<span class="badge badge-feedback">received</span>`;
+                    actionsHtml = `<button class="btn-action btn-resolve" onclick="openReplyModal(${f.id}, '${f.user_name}')" title="Reply">✉️</button>`;
+                }
 
                 const row = `
-                    <tr>
+                    <tr id="row-${f.id}">
                         <td class="user-cell">
                             <span class="user-name">${f.user_name}</span>
                             <span class="user-email">${f.user_email}</span>
                         </td>
                         <td>${typeBadge}${category}</td>
                         <td class="rating-cell">${f.rating ? f.rating + ' ★' : '-'}</td>
-                        <td class="msg-cell">${f.message}</td>
+                        <td class="msg-cell">
+                            ${f.message || '<i style="opacity:0.5">No message</i>'}
+                            ${f.admin_reply ? `<div style="margin-top:8px; padding:6px; background:rgba(139, 92, 246, 0.1); border-left:2px solid #a78bfa; font-size:0.8rem; border-radius:4px;"><b>Reply:</b> ${f.admin_reply}</div>` : ''}
+                        </td>
                         <td>${date}</td>
                         <td>${statusBadge}</td>
                         <td class="actions">
-                            ${resolveBtn}
-                            <button class="btn-action btn-delete" onclick="deleteFeedback(${f.id})">Delete</button>
+                            ${actionsHtml}
+                            <button class="btn-action btn-delete" onclick="deleteFeedback(${f.id})">🗑️</button>
                         </td>
                     </tr>
                 `;
@@ -411,7 +533,6 @@
         }
 
         async function updateStatus(id, status) {
-            if (!confirm(`Mark this as ${status}?`)) return;
             try {
                 const res = await fetch(`/api/admin/feedback/${id}`, {
                     method: 'PUT',
@@ -422,9 +543,54 @@
                     allFeedbacks = allFeedbacks.map(f => f.id === id ? { ...f, status } : f);
                     updateStats();
                     renderTable();
+                    if (status === 'resolved') alert('Issue marked as resolved and email notification sent!');
                 }
             } catch (err) {
                 console.error(err);
+            }
+        }
+
+        function openReplyModal(id, name) {
+            currentReplyId = id;
+            document.getElementById('replyToUser').innerText = name;
+            document.getElementById('replyText').value = '';
+            document.getElementById('replyModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('replyModal').style.display = 'none';
+        }
+
+        async function submitReply() {
+            const replyMessage = document.getElementById('replyText').value.trim();
+            if (!replyMessage) return alert('Please enter a message');
+
+            const btn = document.getElementById('btnSubmitReply');
+            btn.disabled = true;
+            btn.innerText = 'Sending...';
+
+            try {
+                const res = await fetch(`/api/admin/feedback/${currentReplyId}/reply`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ replyMessage })
+                });
+
+                if (res.ok) {
+                    allFeedbacks = allFeedbacks.map(f => f.id === currentReplyId ? { ...f, admin_reply: replyMessage, status: 'replied' } : f);
+                    renderTable();
+                    closeModal();
+                    alert('Reply sent via email successfully!');
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to send reply');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Send Reply';
             }
         }
 
@@ -440,6 +606,20 @@
             } catch (err) {
                 console.error(err);
             }
+        }
+
+        // Socket.io Real-time Updates
+        if (typeof io !== 'undefined') {
+            const socket = io();
+            socket.on('feedback_status_updated', (data) => {
+                allFeedbacks = allFeedbacks.map(f => f.id == data.id ? { ...f, status: data.status } : f);
+                renderTable();
+                updateStats();
+            });
+            socket.on('feedback_replied', (data) => {
+                allFeedbacks = allFeedbacks.map(f => f.id == data.id ? { ...f, admin_reply: data.replyMessage, status: data.status } : f);
+                renderTable();
+            });
         }
 
         document.addEventListener('DOMContentLoaded', loadFeedbacks);

@@ -61,7 +61,10 @@ const pool = new Pool({
             "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS auto_accept_perfect BOOLEAN DEFAULT TRUE",
             "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS is_partial BOOLEAN DEFAULT FALSE",
             "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS last_smart_notified_score DECIMAL(10, 4) DEFAULT 0",
-            "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS completed_by TEXT DEFAULT '[]'"
+            "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS completed_by TEXT DEFAULT '[]'",
+            "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS is_selected BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS selection_group_id TEXT DEFAULT NULL",
+            "ALTER TABLE swaps ADD COLUMN IF NOT EXISTS partner_priority_rank INT DEFAULT 0"
         ];
 
         for (const query of swapAlters) {
@@ -128,7 +131,10 @@ const pool = new Pool({
             "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'feedback'",
             "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT NULL",
             "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS message TEXT DEFAULT NULL",
-            "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS rating INT DEFAULT NULL"
+            "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS rating INT DEFAULT NULL",
+            "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'",
+            "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS admin_reply TEXT DEFAULT NULL",
+            "ALTER TABLE feedbacks ADD COLUMN IF NOT EXISTS replied_at TIMESTAMP DEFAULT NULL"
         ];
 
         for (const query of feedbackAlters) {

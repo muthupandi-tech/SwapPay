@@ -1,12 +1,11 @@
 const pool = require('../config/db');
 
-async function checkFeedbacksTable() {
+async function checkNotificationsTable() {
     try {
         const { rows } = await pool.query(`
-            SELECT column_name, data_type 
+            SELECT column_name, is_nullable 
             FROM information_schema.columns 
-            WHERE table_name = 'feedbacks'
-            ORDER BY ordinal_position
+            WHERE table_name = 'notifications'
         `);
         console.table(rows);
         process.exit(0);
@@ -16,4 +15,4 @@ async function checkFeedbacksTable() {
     }
 }
 
-checkFeedbacksTable();
+checkNotificationsTable();

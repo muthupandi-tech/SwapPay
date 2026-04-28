@@ -1,11 +1,11 @@
 const pool = require('../config/db');
 
-async function checkFeedbacksTable() {
+async function checkSwapsTable() {
     try {
         const { rows } = await pool.query(`
             SELECT column_name, data_type 
             FROM information_schema.columns 
-            WHERE table_name = 'feedbacks'
+            WHERE table_name = 'swaps'
             ORDER BY ordinal_position
         `);
         console.table(rows);
@@ -16,4 +16,4 @@ async function checkFeedbacksTable() {
     }
 }
 
-checkFeedbacksTable();
+checkSwapsTable();

@@ -791,6 +791,67 @@ async function sendResetPasswordEmail(toEmail, token) {
     }
 }
 
+/**
+ * Issue Resolved Email Template
+ */
+async function sendIssueResolvedEmail(toEmail, userName) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const content = `
+        <p>Hi ${userName},</p>
+        <p>Your reported issue has been successfully resolved.</p>
+        <p>If you still face any problems, feel free to reply to this email.</p>
+        <p>– Team SwapPay</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Support" <${senderEmail}>`,
+        to: toEmail,
+        subject: "Your SwapPay Issue is Resolved ✅",
+        html: getEmailTemplateWrapper("Issue Resolved", content)
+    };
+
+    try {
+        await t.sendMail(mailOptions);
+        console.log(`Sent Issue Resolved Email to ${toEmail}`);
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send issue resolved email to ${toEmail}:`, error);
+    }
+}
+
+/**
+ * Admin Feedback Reply Email Template
+ */
+async function sendFeedbackReplyEmail(toEmail, userName, replyMessage) {
+    if (!(await isEmailNotificationEnabled())) return;
+    const t = await getTransporter();
+
+    const content = `
+        <p>Hi ${userName},</p>
+        <p>An administrator has replied to your feedback/issue:</p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            ${replyMessage}
+        </div>
+        <p>If you have further questions, feel free to reach out.</p>
+        <p>– Team SwapPay</p>
+    `;
+
+    const mailOptions = {
+        from: `"SwapPay Support" <${senderEmail}>`,
+        to: toEmail,
+        subject: "New Reply to Your SwapPay Feedback",
+        html: getEmailTemplateWrapper("Admin Reply", content)
+    };
+
+    try {
+        await t.sendMail(mailOptions);
+        console.log(`Sent Feedback Reply Email to ${toEmail}`);
+    } catch (error) {
+        console.error(`[CRITICAL] Failed to send feedback reply email to ${toEmail}:`, error);
+    }
+}
+
 module.exports = {
     sendSwapCreatedEmail,
     sendSwapMatchedEmail,
@@ -805,5 +866,7 @@ module.exports = {
     sendTrustWarningEmail,
     sendContactEmail,
     sendFeedbackEmailToAdmin,
-    sendResetPasswordEmail
+    sendResetPasswordEmail,
+    sendIssueResolvedEmail,
+    sendFeedbackReplyEmail
 };

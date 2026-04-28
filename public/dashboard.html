@@ -936,7 +936,8 @@
             </div>
 
             <!-- Avatar Dropdown (Moved from Header) -->
-            <div class="user-profile-container" onclick="toggleProfileDropdown(event)">
+            <div class="user-profile-container" onclick="toggleProfileDropdown(event)" style="display: flex; align-items: center; gap: 10px;">
+                <span id="navUserName" style="color: var(--text-primary); font-weight: 600; font-size: 0.95rem; display: inline-block;">Loading...</span>
                 <div class="profile-avatar">👤</div>
                 <div class="profile-dropdown" id="profileDropdown" onclick="event.stopPropagation()">
                     <a href="/profile" class="profile-dropdown-item">View Profile</a>
@@ -1587,6 +1588,12 @@
                         }
 
                         prevStats = { activeSwaps: newActive, totalExchanged: newTotal, trustScore: newTrust };
+                        
+                        // Update User Name in Nav
+                        const navUserName = document.getElementById('navUserName');
+                        if (navUserName && data.userName) {
+                            navUserName.innerText = data.userName;
+                        }
 
                         // --- NEW: Trust Recovery System Banner ---
                         const warningContainer = document.getElementById('trustWarningContainer');
@@ -1637,7 +1644,7 @@
             const badgeText = isNeedingCash ? 'Needs Cash' : 'Needs UPI';
 
             let statusClass = '';
-            if (swap.status === 'matched') statusClass = 'status-matched';
+            if (swap.status === 'matched' || swap.status === 'pending_confirmation') statusClass = 'status-matched';
             if (swap.status === 'completed') statusClass = 'status-completed';
 
             // Determine proper rating value to show
@@ -1645,7 +1652,8 @@
             const formattedRating = ratingVal ? (parseFloat(ratingVal)).toFixed(1) : 'New';
             const ratingBadge = `<span class="user-rating-badge" title="User's Average Rating">★ ${formattedRating}</span>`;
 
-            const headerName = isMyContext ? (swap.otherPartyName || (swap.isCreator ? 'You' : 'Swap Partner')) : swap.requester_name;
+            const partnerNameFallback = swap.isCreator ? (swap.matched_name || 'Swap Partner') : (swap.creator_name || 'Swap Partner');
+            const headerName = isMyContext ? (swap.otherPartyName || partnerNameFallback || (swap.isCreator ? 'You' : 'Swap Partner')) : (swap.requester_name || swap.creator_name || 'User');
 
             let actionArea = '';
 
@@ -1660,7 +1668,7 @@
                             <button class="btn-accept-swap" onclick="deleteSwap(${swap.id})" style="flex: 1; background: rgba(255, 107, 107, 0.1); border: 1px solid #ff6b6b; color: #ff6b6b;">Delete</button>
                         </div>
                     `;
-                } else if (swap.status === 'matched') {
+                } else if (swap.status === 'matched' || swap.status === 'pending_confirmation') {
                     let hasCompleted = swap.isCreator ? swap.creator_completed : swap.acceptor_completed;
 
                     const unreadBadgeHtml = swap.unread_count > 0 ? `<div class="unread-badge" id="unread-badge-${swap.id}">${swap.unread_count > 9 ? '9+' : swap.unread_count}</div>` : '';
@@ -1693,7 +1701,7 @@
                     actionArea = `
                         <div class="status-text success">Completed</div>
                         <button class="btn-accept-swap btn-disabled" style="margin-top: 1rem;">Completed</button>
-                        <button class="btn-accept-swap" onclick="openRatingModal(${swap.id})" style="margin-top: 0.5rem; background: rgba(255,159,67,0.1); border: 1px solid #ff9f43; color: #ff9f43;">Review this Swap</button>
+                        ${(swap.matched_user_id || !swap.is_partial) ? `<button class="btn-accept-swap" onclick="openRatingModal(${swap.id})" style="margin-top: 0.5rem; background: rgba(255,159,67,0.1); border: 1px solid #ff9f43; color: #ff9f43;">Review this Swap</button>` : ''}
                     `;
                 }
             } else {
@@ -1714,11 +1722,18 @@
 
             // Use remaining_amount only for active/open swaps. For matched/completed, show the match amount.
             const isPending = swap.status === 'active' || swap.status === 'open';
-            const amountToDisplay = (isPending && swap.remaining_amount !== undefined && swap.remaining_amount !== null) ? swap.remaining_amount : swap.amount;
-            
-            const remainingLabel = isPending && swap.remaining_amount !== undefined && swap.remaining_amount !== null && parseFloat(swap.remaining_amount) < parseFloat(swap.total_amount || swap.amount) 
-                ? `<div style="font-size: 0.75rem; color: #2ecc71; font-weight: bold; margin-bottom: 2px;">Remaining: ₹${swap.remaining_amount}</div>` 
-                : '';
+            const currentAmount = (isPending && swap.remaining_amount !== undefined && swap.remaining_amount !== null) ? swap.remaining_amount : swap.amount;
+            const totalAmount = swap.total_amount || swap.amount;
+
+            let amountDisplayHTML = `₹${currentAmount}`;
+            if (isPending && parseFloat(currentAmount) < parseFloat(totalAmount)) {
+                amountDisplayHTML = `<div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary);">₹${currentAmount}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-secondary); opacity: 0.8; margin-top: -4px;">₹${currentAmount} left / ₹${totalAmount} total</div>
+                </div>`;
+            } else {
+                amountDisplayHTML = `<div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary);">₹${currentAmount}</div>`;
+            }
 
             return ` 
             <div class="swap-card ${statusClass}" data-swap-id="${swap.id}"> 
@@ -1728,8 +1743,7 @@
                         <span class="swap-type-badge ${badgeClass}" >${badgeText}</span>
                     </div> 
                     <div style="text-align: right;" > 
-                        ${remainingLabel}
-                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-secondary)" >₹${amountToDisplay}</div> 
+                        ${amountDisplayHTML}
                     </div> 
                 </div> 
                 <div class="swap-detail" style="margin-top: 1rem;" > 
@@ -1779,6 +1793,7 @@
         
         function getDateGroupHeader(dateStr) {
             const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return 'Earlier';
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const yesterday = new Date(today);
@@ -1842,7 +1857,7 @@
                 } else {
                     const groupedSwaps = Object.values(parents);
                     baseItems = groupedSwaps.filter(swap => {
-                        if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open');
+                        if (currentTab === 'active') return (swap.status === 'active' || swap.status === 'open' || swap.status === 'matched' || swap.status === 'pending_confirmation' || swap.status === 'MATCHED');
                         return true;
                     });
                 }
@@ -1901,7 +1916,7 @@
                     if (currentTab === 'matched') {
                         // MATCHED RENDER
                         const match = item;
-                        const isRequester = match.requester_id === cId;
+                        const isRequester = Number(match.requester_id) === Number(cId);
                         const rawOtherUser = isRequester ? match.accepter_name : match.requester_name;
                         const otherUser = rawOtherUser || "User";
                         
@@ -2119,6 +2134,17 @@
 
                     const formattedScore = swap.trustScore ? parseFloat(swap.trustScore).toFixed(1) : "0.0";
                     const trustBadge = getTrustBadgeHTML(swap.trustScore);
+                    const amountToDisplay = swap.remaining_amount || swap.amount;
+                    const totalAmount = swap.total_amount || swap.amount;
+                    let amountHTML = `₹${amountToDisplay}`;
+                    if (parseFloat(amountToDisplay) < parseFloat(totalAmount)) {
+                        amountHTML = `<div style="line-height: 1.2; margin-bottom: 5px;">
+                            <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary);">₹${amountToDisplay}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); opacity: 0.8;">₹${amountToDisplay} left / ₹${totalAmount} total</div>
+                        </div>`;
+                    } else {
+                        amountHTML = `<div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${amountToDisplay}</div>`;
+                    }
 
                     card.innerHTML = `
                       ${bestMatchBadge}
@@ -2129,7 +2155,7 @@
                           ⭐ ${formattedScore} Trust Score
                       </div>
                       ${swap.distance ? `<div style="font-size: 0.9rem; color: ${swap.distance.includes('unavailable') ? '#f59e0b' : '#00cec9'}; margin-bottom: 5px; font-weight: bold;">${swap.distance.includes('unavailable') ? '⚠️' : '📍'} ${swap.distance}${swap.distance.includes('unavailable') ? '' : ' away'}</div>` : ''}
-                      <div class="swap-amount" style="font-size: 1.4rem; font-weight: 800; color: var(--accent-secondary); margin-bottom: 5px;">₹${swap.amount}</div>
+                      ${amountHTML}
                       <div class="swap-type" style="margin-bottom: 10px;">
                         <span class="swap-type-badge ${swap.type === 'need_cash' ? 'type-upi' : 'type-cash'}" style="font-size: 0.8rem;">
                             Needs ${swap.type === "need_upi" ? "UPI" : "Cash"}
@@ -2139,7 +2165,7 @@
                         <span>Location:</span> <strong style="color: var(--text-primary);">${swap.location}</strong>
                       </div>
 
-                      <button class="accept-btn btn-accept-swap" data-id="${swap.id}" style="width: 100%;">
+                      <button class="accept-btn btn-accept-swap" data-id="${swap.id}" data-amount="${amountToDisplay}" style="width: 100%;">
                         Accept Swap
                       </button>
                     `;
@@ -2183,9 +2209,7 @@
         document.addEventListener("click", async (e) => {
             if (e.target.classList.contains("accept-btn")) {
                 const swapId = e.target.dataset.id;
-                const card = e.target.closest('.swap-card');
-                const amountText = card.querySelector('.swap-amount')?.innerText || '0';
-                const matchAmount = parseFloat(amountText.replace('₹', ''));
+                const matchAmount = parseFloat(e.target.dataset.amount || '0');
                 const swapTypeBadge = card.querySelector('.swap-type-badge');
                 const neededType = swapTypeBadge.innerText.includes('Cash') ? 'need_cash' : 'need_upi'; // Requester needs this
                 const myRequiredType = neededType === 'need_cash' ? 'need_upi' : 'need_cash'; // I must provide this

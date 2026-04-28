@@ -1,6 +1,7 @@
 // const mysql = require('mysql2');
 const { Pool } = require('pg');
 const { generateReportPDF } = require('../utils/reportGenerator');
+const { sendIssueResolvedEmail, sendFeedbackReplyEmail } = require('../utils/emailService');
 const pool = require('../config/db');
 
 exports.getStats = async (req, res) => {
@@ -314,12 +315,79 @@ exports.updateFeedbackStatus = async (req, res) => {
         
         if (!status) return res.status(400).json({ error: 'Status is required' });
 
-        // await pool.execute('UPDATE feedbacks SET status = ? WHERE id = ?', [status, id]);
+        // Get feedback and user details first
+        const { rows: fbRows } = await pool.query(`
+            SELECT f.*, u.email, u.name 
+            FROM feedbacks f 
+            JOIN users u ON f.user_id = u.id 
+            WHERE f.id = $1
+        `, [id]);
+
+        if (fbRows.length === 0) {
+            return res.status(404).json({ error: 'Feedback not found' });
+        }
+
+        const feedback = fbRows[0];
+
+        // Update status
         await pool.query('UPDATE feedbacks SET status = $1 WHERE id = $2', [status, id]);
+
+        // If status is 'resolved' and type is 'issue', send email
+        if (status === 'resolved' && feedback.type === 'issue') {
+            await sendIssueResolvedEmail(feedback.email, feedback.name);
+        }
+
+        // Real-time update via Socket.io
+        if (global.io) {
+            global.io.emit('feedback_status_updated', { id, status });
+        }
+
         res.json({ message: `Feedback marked as ${status}` });
     } catch (error) {
         console.error('Error updating feedback status:', error);
         res.status(500).json({ error: 'Failed to update feedback status.' });
+    }
+};
+
+exports.replyToFeedback = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { replyMessage } = req.body;
+
+        if (!replyMessage) return res.status(400).json({ error: 'Reply message is required' });
+
+        // Get feedback and user details
+        const { rows: fbRows } = await pool.query(`
+            SELECT f.*, u.email, u.name 
+            FROM feedbacks f 
+            JOIN users u ON f.user_id = u.id 
+            WHERE f.id = $1
+        `, [id]);
+
+        if (fbRows.length === 0) {
+            return res.status(404).json({ error: 'Feedback not found' });
+        }
+
+        const feedback = fbRows[0];
+
+        // Update feedback with reply
+        await pool.query(
+            'UPDATE feedbacks SET admin_reply = $1, status = $2, replied_at = NOW() WHERE id = $3',
+            [replyMessage, 'replied', id]
+        );
+
+        // Send email reply
+        await sendFeedbackReplyEmail(feedback.email, feedback.name, replyMessage);
+
+        // Real-time update via Socket.io
+        if (global.io) {
+            global.io.emit('feedback_replied', { id, replyMessage, status: 'replied' });
+        }
+
+        res.json({ message: 'Reply sent successfully' });
+    } catch (error) {
+        console.error('Error replying to feedback:', error);
+        res.status(500).json({ error: 'Failed to send reply.' });
     }
 };
 

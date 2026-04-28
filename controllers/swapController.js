@@ -1,6 +1,6 @@
 // const mysql = require('mysql2');
 const { Pool } = require('pg');
-const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail } = require('../utils/emailService');
+const { sendSwapMatchedEmail, sendSwapCompletedEmail, sendRatingReceivedEmail, sendTrustWarningEmail } = require('../utils/emailService');
 const pool = require('../config/db');
 
 // Create a new swap request
@@ -81,7 +81,7 @@ exports.createSwap = async (req, res) => {
             }
 
             candidateQuery += ` ORDER BY CASE WHEN s.remaining_amount = $3 THEN 1 ELSE 2 END, s.created_at ASC LIMIT 10`;
-            queryParams.push(remainingNeeded);
+            // queryParams.push(remainingNeeded); // REMOVED: Redundant, $3 is already in queryParams
 
             // const [matchRows] = await pool.execute(candidateQuery, queryParams);
             const { rows: matchRows } = await pool.query(candidateQuery, queryParams);
@@ -197,6 +197,18 @@ exports.createSwap = async (req, res) => {
                     remainingNeededAfter: remainingNeeded - chunkAmount
                 });
 
+                // --- NEW: Insert into matches table for auto-match ---
+                // This ensures it shows up in the "Matched" tab with the correct partner name
+                await pool.query(`
+                    INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                `, [
+                    childResult[0].id, // Use child swap ID for accurate tracking
+                    candidate.user_id, // Original requester (Candidate)
+                    userId,            // Accepter (Current User)
+                    "matched"
+                ]);
+
                 remainingNeeded -= chunkAmount;
 
                 if (!isPartialAllowed && remainingNeeded <= 0) {
@@ -306,7 +318,7 @@ exports.getNearbySwaps = async (req, res) => {
     try {
         // Fetch active swaps and join with users table to get the requester's name AND average rating
         const query = `
-            SELECT s.id, s.type, s.remaining_amount as amount, s.location, s.created_at, s.is_edited, u.name as requester_name,
+            SELECT s.id, s.type, s.total_amount, s.remaining_amount, s.remaining_amount as amount, s.location, s.created_at, s.is_edited, u.name as requester_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = s.user_id) as requester_rating
             FROM swaps s 
             JOIN users u ON s.user_id = u.id 
@@ -584,12 +596,12 @@ exports.getDashboardStats = async (req, res) => {
         // Include user role for frontend logic
         const role = req.session.role || 'user';
 
-        // Recovery progress
-        // const [uRow] = await pool.execute('SELECT recovery_progress FROM users WHERE id = ?', [userId]);
-        const { rows: uRow } = await pool.query('SELECT recovery_progress FROM users WHERE id = $1', [userId]);
-        const recoveryProgress = uRow.length > 0 ? uRow[0].recovery_progress : 0;
+        // Fetch user info (name and recovery progress)
+        const { rows: userRow } = await pool.query('SELECT name, recovery_progress FROM users WHERE id = $1', [userId]);
+        const userName = userRow.length > 0 ? userRow[0].name : 'User';
+        const recoveryProgress = userRow.length > 0 ? userRow[0].recovery_progress : 0;
 
-        res.status(200).json({ activeSwaps, totalExchanged, trustScore, role, avgStars, recoveryProgress });
+        res.status(200).json({ activeSwaps, totalExchanged, trustScore, role, avgStars, recoveryProgress, userName });
     } catch (error) {
         console.error('Error calculating stats:', error);
         res.status(500).json({ error: 'An error occurred while fetching dashboard stats.' });
@@ -605,7 +617,7 @@ exports.getActiveSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited, s.creator_completed, s.acceptor_completed,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -625,7 +637,7 @@ exports.getActiveSwaps = async (req, res) => {
             const placeholders = parentIds.map((_, i) => '$' + (i + 1)).join(',');
             const placeholders2 = parentIds.map((_, i) => '$' + (i + 1 + parentIds.length)).join(',');
             const childQuery = `
-                SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
+                SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited, s.creator_completed, s.acceptor_completed,
                 u1.name as creator_name, u2.name as matched_name,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
                 (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -653,14 +665,14 @@ exports.getActiveSwaps = async (req, res) => {
                 // Determine if the logged in user is the creator
                 isCreator: swap.user_id === userId,
                 // Easy access to the "other" party's name
-                otherPartyName: swap.matched_name || 'Waiting...',
-                otherPartyId: swap.matched_user_id,
+                otherPartyName: swap.user_id === userId ? (swap.matched_name || 'Waiting...') : swap.creator_name,
+                otherPartyId: swap.user_id === userId ? swap.matched_user_id : swap.user_id,
                 // Add the relevant rating based on who created vs matched
-                otherPartyRating: swap.matched_rating
+                otherPartyRating: swap.user_id === userId ? swap.matched_rating : swap.creator_rating
             };
         });
 
-        res.status(200).json({ success: true, swaps: swapsWithContext });
+        res.status(200).json({ success: true, swaps: swapsWithContext, currentUserId: userId });
     } catch (error) {
         console.error('Error fetching my swaps:', error);
         res.status(500).json({ error: 'An error occurred while fetching your swaps.' });
@@ -683,12 +695,17 @@ SELECT
   m.accepter_id,
   s.status,
   s.is_edited,
+  s.creator_completed,
+  s.acceptor_completed,
   s.created_at AS posted_time,
+  m.created_at AS matched_time,
   s.amount,
   s.type,
   s.location,
   u1.name AS requester_name,
   u2.name AS accepter_name,
+  (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) AS requester_trust,
+  (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) AS accepter_trust,
   (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = m.swap_id AND cm.sender_id != $1 AND cm.status != 'seen') AS unread_count
 FROM matches m
 JOIN swaps s ON m.swap_id = s.id
@@ -700,7 +717,6 @@ WHERE
 ORDER BY m.created_at DESC;
         `;
         
-        // const [rows1] = await pool.execute(query1, [currentUserId, currentUserId, currentUserId]);
         const { rows: rows1 } = await pool.query(query1, [currentUserId, currentUserId, currentUserId]);
 
         const query2 = `
@@ -711,31 +727,45 @@ SELECT
   s.matched_user_id AS accepter_id,
   s.status,
   s.is_edited,
+  s.creator_completed,
+  s.acceptor_completed,
   s.created_at AS posted_time,
-  s.created_at AS matched_time,
+  COALESCE(s.match_time, s.created_at) AS matched_time,
   s.amount,
   s.type,
   s.location,
   u1.name AS requester_name,
   u2.name AS accepter_name,
+  (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) AS requester_trust,
+  (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) AS accepter_trust,
   (SELECT COUNT(*) FROM chat_messages cm WHERE cm.swap_id = s.id AND cm.sender_id != $1 AND cm.status != 'seen') AS unread_count
 FROM swaps s
 LEFT JOIN users u1 ON s.user_id = u1.id
 LEFT JOIN users u2 ON s.matched_user_id = u2.id
 WHERE (s.status = 'matched' OR s.status = 'MATCHED' OR s.status = 'pending_confirmation')
 AND (s.user_id = $2 OR s.matched_user_id = $3)
+AND s.parent_swap_id IS NULL
+AND s.matched_user_id IS NOT NULL
 ORDER BY s.created_at DESC;
         `;
-        // const [rows2] = await pool.execute(query2, [currentUserId, currentUserId, currentUserId]);
         const { rows: rows2 } = await pool.query(query2, [currentUserId, currentUserId, currentUserId]);
 
         const swapIdsInMatches = new Set(rows1.map(r => r.swap_id));
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(r.swap_id));
 
-        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.posted_time) - new Date(a.posted_time));
+        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
+        const matchesWithContext = matches.map(m => {
+            const isCreator = Number(m.requester_id) === Number(currentUserId);
+            return {
+                ...m,
+                isCreator,
+                otherPartyName: isCreator ? m.accepter_name : m.requester_name,
+                otherPartyId: isCreator ? m.accepter_id : m.requester_id,
+                trustScore: isCreator ? m.accepter_trust : m.requester_trust
+            };
+        });
 
-        console.log("Matched rows:", matches);
-        res.status(200).json({ success: true, swaps: matches, currentUserId });
+        res.status(200).json({ success: true, swaps: matchesWithContext, currentUserId });
     } catch (err) {
         console.error("Matched API Error:", err);
         return res.status(500).json({
@@ -754,7 +784,7 @@ exports.getCompletedSwaps = async (req, res) => {
 
     try {
         const query = `
-            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited,
+            SELECT s.id, s.user_id, s.type, s.amount, s.total_amount, s.remaining_amount, s.location, s.status, s.matched_user_id, s.match_time, s.parent_swap_id, s.matched_parent_swap_id, s.lat, s.lng, s.completed_at, s.created_at, s.is_edited, s.creator_completed, s.acceptor_completed,
             u1.name as creator_name, u2.name as matched_name,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u1.id) as creator_rating,
             (SELECT AVG(stars) FROM ratings WHERE rated_user_id = u2.id) as matched_rating
@@ -762,6 +792,7 @@ exports.getCompletedSwaps = async (req, res) => {
             LEFT JOIN users u1 ON s.user_id = u1.id 
             LEFT JOIN users u2 ON s.matched_user_id = u2.id
             WHERE (s.user_id = $1 OR s.matched_user_id = $2) AND s.status = 'completed'
+            AND s.parent_swap_id IS NULL
             ORDER BY COALESCE(s.completed_at, s.created_at) DESC
         `;
         // const [rows] = await pool.execute(query, [userId, userId]);
@@ -777,7 +808,7 @@ exports.getCompletedSwaps = async (req, res) => {
             };
         });
 
-        res.status(200).json({ success: true, swaps: swapsWithContext });
+        res.status(200).json({ success: true, swaps: swapsWithContext, currentUserId: userId });
     } catch (error) {
         console.error('Error fetching completed swaps:', error);
         res.status(500).json({ error: 'An error occurred while fetching completed swaps.' });
@@ -788,7 +819,7 @@ exports.getCompletedSwaps = async (req, res) => {
 exports.rateSwap = async (req, res) => {
     const swapId = req.params.id;
     const userId = req.session.userId;
-    const { stars } = req.body;
+    const stars = parseInt(req.body.stars);
 
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized. Please log in.' });
@@ -834,12 +865,24 @@ exports.rateSwap = async (req, res) => {
             }
         }
 
+        if (!isAuthorized || !ratedUserId) {
+            // Check for child swaps if it's a parent swap
+            const { rows: childRows } = await pool.query('SELECT user_id, matched_user_id FROM swaps WHERE parent_swap_id = $1 OR matched_parent_swap_id = $1 LIMIT 1', [swapId]);
+            if (childRows.length > 0) {
+                const child = childRows[0];
+                if (child.user_id === userId || child.matched_user_id === userId) {
+                    isAuthorized = true;
+                    ratedUserId = (child.user_id === userId) ? child.matched_user_id : child.user_id;
+                }
+            }
+        }
+
         if (!isAuthorized) {
             return res.status(403).json({ error: 'You are not authorized to rate this swap.' });
         }
 
         if (!ratedUserId) {
-            return res.status(500).json({ error: 'Failed to resolve partner ID to rate.' });
+            return res.status(400).json({ error: 'No partner found to rate for this swap.' });
         }
 
         // Check if user already rated this swap
@@ -905,7 +948,6 @@ exports.rateSwap = async (req, res) => {
                     }
 
                     // 3. Warning Email
-                    const { sendTrustWarningEmail } = require('../utils/emailService');
                     await sendTrustWarningEmail(userRows[0].email, avgStars);
                 }
             }
@@ -1031,7 +1073,7 @@ exports.confirmPartnerSelection = async (req, res) => {
         for (let i = 0; i < selectedPartners.length; i++) {
             const partner = selectedPartners[i];
             const candidateId = partner.id;
-            const requestedChunk = parseFloat(partner.amount);
+            const requestedChunk = parseFloat(partner.remaining_amount || partner.amount);
 
             if (remainingNeeded <= 0) break; // Safety net
 
@@ -1185,7 +1227,7 @@ exports.getSwapFeed = async (req, res) => {
         );
         */
         const { rows: myActiveSwaps } = await pool.query(
-            'SELECT amount, type FROM swaps WHERE user_id = $1 AND (status = \'active\' OR status = \'open\')',
+            'SELECT remaining_amount, type FROM swaps WHERE user_id = $1 AND (status = \'active\' OR status = \'open\')',
             [userId]
         );
 
@@ -1201,6 +1243,8 @@ exports.getSwapFeed = async (req, res) => {
               u.name,
               s.lat as creator_lat,
               s.lng as creator_lng,
+              s.total_amount,
+              s.remaining_amount,
               s.remaining_amount as amount,
               s.type,
               s.status,
@@ -1241,11 +1285,11 @@ exports.getSwapFeed = async (req, res) => {
         );
         */
         const { rows: lastReqRows } = await pool.query(
-            'SELECT amount FROM swaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+            'SELECT remaining_amount FROM swaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
             [userId]
         );
         if (lastReqRows.length > 0) {
-            userAmount = parseFloat(lastReqRows[0].amount);
+            userAmount = parseFloat(lastReqRows[0].remaining_amount);
         }
 
         // Helper function for distance
@@ -1268,7 +1312,7 @@ exports.getSwapFeed = async (req, res) => {
             
             // Check if this swap is a "Best Match" (exact amount and compatible type)
             const isBestMatch = myActiveSwaps.some(mySwap => 
-                parseFloat(mySwap.amount) === swapAmount && mySwap.type === oppositeType
+                parseFloat(mySwap.remaining_amount) === swapAmount && mySwap.type === oppositeType
             );
 
             const dist = getDistance(userLat, userLng, swap.creator_lat, swap.creator_lng);
@@ -1409,26 +1453,12 @@ exports.acceptSwap = async (req, res) => {
             const newRemaining = parentRemaining - matchAmount;
             const newParentStatus = newRemaining <= 0 ? 'matched' : 'active';
             
-            /*
-            await pool.execute(
-                'UPDATE swaps SET remaining_amount = ?, status = ?, match_time = IF(? = "matched", NOW(), match_time) WHERE id = ?',
-                [newRemaining, newParentStatus, newParentStatus, parentSwapId]
-            );
-            */
             await pool.query(
                 'UPDATE swaps SET remaining_amount = $1, status = $2, match_time = CASE WHEN $3 = \'matched\' THEN NOW() ELSE match_time END WHERE id = $4',
                 [newRemaining, newParentStatus, newParentStatus, parentSwapId]
             );
 
             // Create a new child swap for User B to represent this match
-            /*
-            const [childResult] = await pool.execute(`
-                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)
-            `, [
-                currentUserId, parentSwap.type, matchAmount, matchAmount, 0, parentSwap.location, 'matched', swap.user_id, parentSwapId, swapId
-            ]);
-            */
             const { rows: childResultRows } = await pool.query(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, parent_swap_id, matched_parent_swap_id) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10) RETURNING id
@@ -1442,40 +1472,31 @@ exports.acceptSwap = async (req, res) => {
         } else {
             // --- CREATE NEW (Standard Logic) ---
             const oppositeType = swap.type === 'need_cash' ? 'need_upi' : 'need_cash';
-            /*
-            const [childResult] = await pool.execute(`
-                INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, matched_parent_swap_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
-            `, [
-                currentUserId, oppositeType, swap.amount, swap.amount, 0, swap.location, 'matched', swap.user_id, swapId
-            ]);
-            */
+            const matchAmount = parseFloat(swap.remaining_amount !== undefined && swap.remaining_amount !== null ? swap.remaining_amount : swap.amount);
+
             const { rows: childResultRows } = await pool.query(`
                 INSERT INTO swaps (user_id, type, amount, total_amount, remaining_amount, location, status, matched_user_id, match_time, matched_parent_swap_id) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9) RETURNING id
             `, [
-                currentUserId, oppositeType, swap.amount, swap.amount, 0, swap.location, 'matched', swap.user_id, swapId
+                currentUserId, oppositeType, matchAmount, matchAmount, 0, swap.location, 'matched', swap.user_id, swapId
             ]);
             myFinalSwapId = childResultRows[0].id;
         }
 
         // Update the requester's swap (the one being accepted)
-        /*
-        await pool.execute(`
-          UPDATE swaps
-          SET status = 'matched',
-              matched_user_id = ?,
-              match_time = NOW()
-          WHERE id = ?
-        `, [currentUserId, swapId]);
-        */
+        // We must DEDUCT from its remaining_amount and only mark as matched if empty.
+        const acceptedMatchAmount = parseFloat(swap.remaining_amount !== undefined && swap.remaining_amount !== null ? swap.remaining_amount : swap.amount);
+        const newAcceptedRemaining = 0; // Since we accepted the ENTIRETY of its remaining amount
+        const acceptedStatus = 'matched';
+
         await pool.query(`
           UPDATE swaps
-          SET status = 'matched',
-              matched_user_id = $1,
+          SET remaining_amount = $1,
+              status = $2,
+              matched_user_id = $3,
               match_time = NOW()
-          WHERE id = $2
-        `, [currentUserId, swapId]);
+          WHERE id = $4
+        `, [newAcceptedRemaining, acceptedStatus, currentUserId, swapId]);
 
         // Insert into matches table for convenience
         /*
@@ -1493,7 +1514,7 @@ exports.acceptSwap = async (req, res) => {
           INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
           VALUES ($1, $2, $3, $4, NOW())
         `, [
-          swapId,
+          myFinalSwapId, // Use the child swap ID instead of parent ID
           swap.user_id,
           currentUserId,
           "matched"
