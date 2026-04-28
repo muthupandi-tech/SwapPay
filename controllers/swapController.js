@@ -1365,8 +1365,6 @@ exports.getSwapFeed = async (req, res) => {
         });
 
         // Apply sorting: 
-        // 0. Trust Tier (Score >= 2 before Score < 2)
-        // 1. Nearest distance, 2. Higher trust score, 3. Latest created
         finalSwaps.sort((a, b) => {
             // 0. Trust Tier Check (Visibility Reduction for < 2 stars)
             const scoreA = parseFloat(a.trustScore) || 0;
@@ -1379,6 +1377,15 @@ exports.getSwapFeed = async (req, res) => {
                 return isLowTrustA ? 1 : -1; // Low-trust users go to the bottom
             }
 
+            if (sort === 'closest') {
+                const diffA = Math.abs(parseFloat(a.amount) - userAmount);
+                const diffB = Math.abs(parseFloat(b.amount) - userAmount);
+                if (diffA !== diffB) return diffA - diffB;
+            } else if (sort === 'latest') {
+                return new Date(b.created_at) - new Date(a.created_at);
+            }
+
+            // Default Sort Chain (if sort matches or not specified)
             // 1. Nearest Distance
             const distA = a.distanceVal;
             const distB = b.distanceVal;
@@ -1398,7 +1405,7 @@ exports.getSwapFeed = async (req, res) => {
                 return scoreB - scoreA;
             }
 
-            // 3. Latest Created
+            // 3. Latest Created (Absolute Fallback)
             return new Date(b.created_at) - new Date(a.created_at);
         });
 

@@ -1855,6 +1855,13 @@
                         let myParentId = child.isCreator ? child.parent_swap_id : child.matched_parent_swap_id;
                         if (parents[myParentId]) {
                             parents[myParentId].childChunks.push(child);
+                            // Ensure parent shows the most recent date for filtering purposes
+                            const pDate = new Date(parents[myParentId].completed_at || parents[myParentId].created_at);
+                            const cDate = new Date(child.completed_at || child.created_at);
+                            if (cDate > pDate) {
+                                if (child.completed_at) parents[myParentId].completed_at = child.completed_at;
+                                if (child.created_at) parents[myParentId].created_at = child.created_at;
+                            }
                         } else {
                             parents[child.id] = { ...child, childChunks: [] };
                         }
@@ -1888,12 +1895,12 @@
                 if (currentSwapDateFilter === 'Today') {
                     const today = new Date();
                     today.setHours(0,0,0,0);
-                    baseItems = baseItems.filter(s => new Date(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= today.getTime());
+                    baseItems = baseItems.filter(s => getCorrectedDate(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= today.getTime());
                 } else if (currentSwapDateFilter === 'This Week') {
                     const weekAgo = new Date();
                     weekAgo.setDate(weekAgo.getDate() - 7);
                     weekAgo.setHours(0,0,0,0);
-                    baseItems = baseItems.filter(s => new Date(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= weekAgo.getTime());
+                    baseItems = baseItems.filter(s => getCorrectedDate(s.completed_at || s.matched_time || s.posted_time || s.created_at).getTime() >= weekAgo.getTime());
                 }
 
                 container.innerHTML = '';
