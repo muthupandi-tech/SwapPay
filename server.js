@@ -19,8 +19,11 @@ app.use(helmet({
 
 // CORS Configuration
 app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
-    credentials: true
+  origin: [
+    "https://your-vercel-frontend.vercel.app",
+    "http://localhost:3000"
+  ],
+  credentials: true
 }));
 
 const server = http.createServer(app);
