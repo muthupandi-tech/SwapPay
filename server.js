@@ -224,11 +224,14 @@ app.get('/api/hello', (req, res) => {
 
 // Routes to serve the HTML pages
 app.get('/', (req, res) => {
-    // If logged in, redirect to dashboard
-    if (req.session && req.session.userId) {
-        return res.redirect('/dashboard');
-    }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.send('SwapPay Backend Running 🚀');
+});
+
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'SwapPay API Running 🚀'
+  });
 });
 
 app.get('/login', (req, res) => {
