@@ -1,3 +1,18 @@
 {
-    "outputDirectory": "public"
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/register", "destination": "/register.html" },
+    { "source": "/verify-otp", "destination": "/verify-otp.html" },
+    { "source": "/forgot-password", "destination": "/forgot-password.html" },
+    { "source": "/reset-password", "destination": "/reset-password.html" },
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/profile", "destination": "/profile.html" },
+    { "source": "/settings", "destination": "/settings.html" },
+    { "source": "/settings/security", "destination": "/settings-security.html" },
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/admin/feedbacks", "destination": "/admin-feedback.html" },
+    { "source": "/support", "destination": "/support.html" }
+  ]
 }
