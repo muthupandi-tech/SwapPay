@@ -298,6 +298,8 @@
         .badge-in_progress { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
         .badge-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 <body>
     <div class="mobile-header">
@@ -425,7 +427,7 @@
 
         async function loadFeedbacks() {
             try {
-                const res = await fetch('/api/admin/feedbacks');
+                const res = await apiFetch('/api/admin/feedbacks');
                 if (!res.ok) throw new Error('Unauthorized');
                 allFeedbacks = await res.json();
                 updateStats();
@@ -534,7 +536,7 @@
 
         async function updateStatus(id, status) {
             try {
-                const res = await fetch(`/api/admin/feedback/${id}`, {
+                const res = await apiFetch(`/api/admin/feedback/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status })
@@ -570,7 +572,7 @@
             btn.innerText = 'Sending...';
 
             try {
-                const res = await fetch(`/api/admin/feedback/${currentReplyId}/reply`, {
+                const res = await apiFetch(`/api/admin/feedback/${currentReplyId}/reply`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ replyMessage })
@@ -597,7 +599,7 @@
         async function deleteFeedback(id) {
             if (!confirm('Permanently delete this submission?')) return;
             try {
-                const res = await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE' });
+                const res = await apiFetch(`/api/admin/feedback/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     allFeedbacks = allFeedbacks.filter(f => f.id !== id);
                     updateStats();
@@ -610,7 +612,7 @@
 
         // Socket.io Real-time Updates
         if (typeof io !== 'undefined') {
-            const socket = io();
+            const socket = window.initSocket();
             socket.on('feedback_status_updated', (data) => {
                 allFeedbacks = allFeedbacks.map(f => f.id == data.id ? { ...f, status: data.status } : f);
                 renderTable();

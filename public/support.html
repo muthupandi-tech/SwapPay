@@ -181,6 +181,8 @@
             margin-top: 5px;
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 <body>
     <div class="blob blob-1"></div>
@@ -353,7 +355,7 @@
         async function submitForm(type, formData) {
             try {
                 formData.type = type;
-                const response = await fetch('/api/support/feedback', {
+                const response = await apiFetch('/api/support/feedback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)

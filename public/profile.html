@@ -334,6 +334,8 @@
             font-size: 0.95rem;
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 
 <body>
@@ -538,7 +540,7 @@
         // Load Profile Data
         async function loadProfile() {
             try {
-                const response = await fetch('/api/user/profile');
+                const response = await apiFetch('/api/user/profile');
                 if (!response.ok) {
                     if (response.status === 401) window.location.href = '/login';
                     throw new Error('Failed to fetch profile');
@@ -611,7 +613,7 @@
             };
 
             try {
-                const response = await fetch('/api/user/profile', {
+                const response = await apiFetch('/api/user/profile', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)

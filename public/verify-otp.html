@@ -146,6 +146,8 @@
             display: block;
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 
 <body>
@@ -240,7 +242,7 @@
             btn.innerText = "Verifying...";
             
             try {
-                const res = await fetch('/api/auth/verify-otp', {
+                const res = await apiFetch('/api/auth/verify-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: userEmail, otp: otpCode })
@@ -272,7 +274,7 @@
             btn.innerText = "Sending...";
             
             try {
-                const res = await fetch('/api/auth/resend-otp', {
+                const res = await apiFetch('/api/auth/resend-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: userEmail })

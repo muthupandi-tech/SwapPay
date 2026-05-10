@@ -500,6 +500,8 @@
             }
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 
 <body>
@@ -750,7 +752,7 @@
 
     <script>
         // Init Socket.IO for global admin tracking
-        const socket = io();
+        const socket = window.initSocket();
 
         socket.on('admin_activity', (data) => {
             const logBox = document.getElementById('activityLog');
@@ -789,7 +791,7 @@
         async function loadAdminData() {
             try {
                 // Load Stats
-                const statsResponse = await fetch('/api/admin/stats');
+                const statsResponse = await apiFetch('/api/admin/stats');
                 if (statsResponse.ok) {
                     const stats = await statsResponse.json();
                     document.getElementById('statsUsers').innerText = stats.totalUsersCount || stats.usersCount;
@@ -800,21 +802,21 @@
                 }
 
                 // Load Users
-                const usersResponse = await fetch('/api/admin/users');
+                const usersResponse = await apiFetch('/api/admin/users');
                 if (usersResponse.ok) {
                     allUsers = await usersResponse.json();
                     renderUsers(allUsers);
                 }
 
                 // Load Swaps
-                const swapsResponse = await fetch('/api/admin/swaps');
+                const swapsResponse = await apiFetch('/api/admin/swaps');
                 if (swapsResponse.ok) {
                     allSwaps = await swapsResponse.json();
                     renderSwaps(allSwaps);
                 }
 
                 // Load Settings
-                const settingsResponse = await fetch('/api/admin/settings');
+                const settingsResponse = await apiFetch('/api/admin/settings');
                 if (settingsResponse.ok) {
                     const settings = await settingsResponse.json();
                     const toggle = document.getElementById('emailToggle');
@@ -953,7 +955,7 @@
 
         async function updateSetting(key, value) {
             try {
-                const res = await fetch('/api/admin/settings', {
+                const res = await apiFetch('/api/admin/settings', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key, value })
@@ -971,7 +973,7 @@
         async function blockUser(id) {
             if (!confirm('Are you sure you want to change this user block status?')) return;
             try {
-                const res = await fetch(`/api/admin/block/${id}`, { method: 'PUT' });
+                const res = await apiFetch(`/api/admin/block/${id}`, { method: 'PUT' });
                 if (res.ok) {
                     loadAdminData();
                 } else {
@@ -986,7 +988,7 @@
         async function deleteSwap(id) {
             if (!confirm('WARNING: Are you sure you want to delete this swap completely? This cannot be undone.')) return;
             try {
-                const res = await fetch(`/api/admin/swap/${id}`, { method: 'DELETE' });
+                const res = await apiFetch(`/api/admin/swap/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     loadAdminData();
                 } else {

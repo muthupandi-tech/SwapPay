@@ -140,6 +140,8 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.set('trust proxy', 1); // Required for secure cookies behind proxies like Render
+
 // Configure express-session
 app.use(session({
     secret: process.env.SESSION_SECRET || 'swappay_fallback_secret',
@@ -147,8 +149,8 @@ app.use(session({
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: true, // MUST be true for sameSite: 'none'
+        sameSite: 'none', // Required for cross-origin requests
         maxAge: 1000 * 60 * 60 * 24 // 1 day session
     }
 }));

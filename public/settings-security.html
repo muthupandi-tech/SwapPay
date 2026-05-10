@@ -106,6 +106,8 @@
             gap: 10px;
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 
 <body>
@@ -234,7 +236,7 @@
             alertBox.style.display = 'none';
 
             try {
-                const response = await fetch('/api/user/change-password', {
+                const response = await apiFetch('/api/user/change-password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPassword, newPassword })

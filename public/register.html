@@ -88,6 +88,8 @@
             text-decoration: underline;
         }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 
 <body>
@@ -189,7 +191,7 @@
             alertBox.style.display = 'none';
 
             try {
-                const response = await fetch('/api/auth/register', {
+                const response = await apiFetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, phone, email, college, password, confirmPassword })

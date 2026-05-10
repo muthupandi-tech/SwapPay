@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sendBtn.disabled = true;
 
             try {
-                const response = await fetch('/api/contact', {
+                const response = await apiFetch('/api/contact', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, email, message })

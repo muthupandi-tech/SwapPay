@@ -156,6 +156,8 @@
         .toast-icon { font-size: 1.5rem; }
         .toast-message { font-weight: 500; font-size: 0.95rem; }
     </style>
+
+    <script src="/js/api.js"></script>
 </head>
 <body>
     <div class="blob blob-1"></div>
@@ -304,7 +306,7 @@
 
         async function loadSettings() {
             try {
-                const res = await fetch('/api/user/settings');
+                const res = await apiFetch('/api/user/settings');
                 if (!res.ok) throw new Error('Failed to load settings');
                 const data = await res.json();
                 
@@ -336,7 +338,7 @@
         async function saveRadius(val) {
             settings.search_radius = parseInt(val);
             try {
-                const res = await fetch('/api/user/settings', {
+                const res = await apiFetch('/api/user/settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
@@ -357,7 +359,7 @@
             updateUI(); // optimistic
 
             try {
-                const res = await fetch('/api/user/settings', {
+                const res = await apiFetch('/api/user/settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
