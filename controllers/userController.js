@@ -94,7 +94,7 @@ exports.getProfile = async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching profile:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -125,7 +125,7 @@ exports.updateProfile = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating profile:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -156,7 +156,7 @@ exports.updateLocation = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating location:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -185,7 +185,7 @@ exports.postLocation = async (req, res) => {
         res.json({ success: true, message: 'Location updated successfully.' });
     } catch (error) {
         console.error('Error updating location:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -215,7 +215,7 @@ exports.updateAutoMatch = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating auto-match:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -252,7 +252,7 @@ exports.getSettings = async (req, res) => {
         res.json({ success: true, settings });
     } catch (error) {
         console.error('Error fetching settings:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -277,7 +277,7 @@ exports.updateSettings = async (req, res) => {
         res.json({ success: true, message: 'Settings updated successfully.' });
     } catch (error) {
         console.error('Error updating settings:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
 
@@ -316,6 +316,6 @@ exports.changePassword = async (req, res) => {
 
     } catch (error) {
         console.error('Error changing password:', error);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 };
