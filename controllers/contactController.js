@@ -21,6 +21,6 @@ exports.sendContactMessage = async (req, res) => {
         return res.status(200).json({ message: 'Message sent successfully ✅' });
     } catch (error) {
         console.error('Contact email error:', error);
-        return res.status(500).json({ error: 'Failed to send message.' });
+        return res.status(500).json({ success: false, error: error.message || 'Failed to send message.' });
     }
 };

@@ -50,29 +50,40 @@ async function getTransporter() {
     if (transporter) return transporter;
 
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_USER !== 'your_email@gmail.com') {
-        transporter = nodemailer.createTransport({
+        let tempTransporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
             }
         });
-        console.log(`[Email Service] Configured with Gmail for ${process.env.EMAIL_USER}`);
-        senderEmail = process.env.EMAIL_USER;
-    } else {
-        console.log("[Email Service] No valid Gmail in .env. Falling back to Mock Ethereal Email.");
-        const testAccount = await nodemailer.createTestAccount();
-        transporter = nodemailer.createTransport({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass
-            }
-        });
-        senderEmail = testAccount.user;
-    }
+        
+        try {
+            await tempTransporter.verify();
+            console.log(`[Email Service] Configured and verified with Gmail for ${process.env.EMAIL_USER}`);
+            transporter = tempTransporter;
+            senderEmail = process.env.EMAIL_USER;
+            return transporter;
+        } catch (error) {
+            console.error(`[CRITICAL] Gmail verification failed for ${process.env.EMAIL_USER}. Error: ${error.message}`);
+            console.log("[Email Service] Falling back to Mock Ethereal Email due to verification failure.");
+            // Proceed to mock creation
+        }
+    } 
+
+    console.log("[Email Service] No valid Gmail in .env or verification failed. Falling back to Mock Ethereal Email.");
+    const testAccount = await nodemailer.createTestAccount();
+    transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: {
+            user: testAccount.user,
+            pass: testAccount.pass
+        }
+    });
+    senderEmail = testAccount.user;
+    
     return transporter;
 }
 
