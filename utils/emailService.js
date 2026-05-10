@@ -71,7 +71,11 @@ async function getTransporter() {
         }
     } 
 
-    console.log("[Email Service] No valid Gmail in .env or verification failed. Falling back to Mock Ethereal Email.");
+    console.log("[Email Service] No valid Gmail in .env or verification failed.");
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Email service not configured or invalid credentials. Please set EMAIL_USER and EMAIL_PASS in Render environment variables.');
+    }
+    console.log("[Email Service] Falling back to Mock Ethereal Email.");
     const testAccount = await nodemailer.createTestAccount();
     transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
