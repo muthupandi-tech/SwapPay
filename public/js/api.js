@@ -62,8 +62,10 @@ window.initSocket = function() {
     if (typeof io !== 'undefined') {
         return io(window.API_BASE_URL, {
             withCredentials: true,
+            transports: ['polling', 'websocket'], // polling first — required for Render proxy
             reconnectionAttempts: 5,
-            timeout: 10000
+            reconnectionDelay: 2000,
+            timeout: 20000
         });
     } else {
         console.warn('Socket.IO (io) is not defined. Ensure socket.io.js is loaded.');

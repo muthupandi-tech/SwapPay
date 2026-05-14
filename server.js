@@ -43,7 +43,11 @@ const io = new Server(server, {
         origin: allowedOrigins,
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    allowEIO3: true,           // Allow older Engine.IO protocol
+    pingTimeout: 60000,        // 60s timeout (handles slow Render wakeups)
+    pingInterval: 25000,       // Ping every 25s to keep connection alive
+    transports: ['polling', 'websocket']  // Polling first for Render proxy compatibility
 });
 
 // Make io globally accessible
