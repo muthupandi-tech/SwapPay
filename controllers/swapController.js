@@ -1426,7 +1426,7 @@ exports.acceptSwap = async (req, res) => {
         console.log("---- ACCEPT SWAP START ----");
         console.log("Request body:", req.body);
         const { swapId, mode, parentSwapId } = req.body;
-        const currentUserId = req.user?.id || req.body.userId || req.session?.userId;
+        const currentUserId = req.session && req.session.userId ? Number(req.session.userId) : null;
 
         console.log("Current User:", currentUserId);
         console.log("Mode:", mode, "ParentSwapId:", parentSwapId);
@@ -1447,7 +1447,7 @@ exports.acceptSwap = async (req, res) => {
             return res.status(404).json({ error: "Swap not found" });
         }
 
-        if (Number(swap.user_id) === Number(currentUserId)) {
+        if (Number(swap.user_id) === currentUserId) {
             return res.status(400).json({ error: "Cannot accept your own swap" });
         }
 
