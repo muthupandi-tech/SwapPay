@@ -250,54 +250,41 @@ exports.resendOTP = async (req, res) => {
 
 exports.forgotPassword = async (req, res) => {
     try {
-        console.log("Forgot password API hit");
         const { email } = req.body;
-        console.log("Request email:", email);
 
         if (!email) {
             return res.status(400).json({ success: false, message: 'Email is required.' });
         }
 
-        // const [rows] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
         const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+
+        // Always return the same message to prevent email enumeration
         if (rows.length === 0) {
-            return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+            return res.json({ success: true, message: 'If an account with that email exists, a reset link has been sent.' });
         }
 
         const crypto = require('crypto');
         const token = crypto.randomBytes(32).toString('hex');
-        console.log("Generated token:", token);
         const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-        /*
-        await pool.execute(
-            'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
-            [token, expiry, rows[0].id]
-        );
-        */
         await pool.query(
             'UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3',
             [token, expiry, rows[0].id]
         );
-        console.log("Token saved in DB");
 
+        // Attempt to send the email - even if it fails, don't crash the response
         const result = await emailService.sendResetPasswordEmail(email, token);
 
         if (!result.success) {
-            console.error("FORGOT PASSWORD ERROR: Email delivery failed:", result.error || "Unknown Error");
-            return res.status(500).json({
-                message: "Internal error",
-                error: result.error || "Failed to send reset email"
-            });
+            console.error('[Forgot Password] Email delivery failed:', result.error);
+            // The token IS saved in the DB. Don't return 500, just note it.
+            // In production, user can still use the link logged in Render logs.
         }
 
-        return res.json({ message: "Reset email sent" });
+        return res.json({ success: true, message: 'If an account with that email exists, a reset link has been sent.' });
     } catch (error) {
-        console.error("FORGOT PASSWORD ERROR:", error);
-        return res.status(500).json({
-            message: "Internal error",
-            error: error.message
-        });
+        console.error('[Forgot Password] Error:', error);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
     }
 };
 

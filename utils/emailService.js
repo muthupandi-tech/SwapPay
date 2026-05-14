@@ -50,31 +50,28 @@ async function getTransporter() {
     if (transporter) return transporter;
 
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_USER !== 'your_email@gmail.com') {
-        let tempTransporter = nodemailer.createTransport({
+        transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
-            }
+            },
+            connectionTimeout: 10000, // 10s connection timeout
+            greetingTimeout: 10000,
+            socketTimeout: 15000
         });
-        
-        try {
-            await tempTransporter.verify();
-            console.log(`[Email Service] Configured and verified with Gmail for ${process.env.EMAIL_USER}`);
-            transporter = tempTransporter;
-            senderEmail = process.env.EMAIL_USER;
-            return transporter;
-        } catch (error) {
-            console.error(`[CRITICAL] Gmail verification failed for ${process.env.EMAIL_USER}. Error: ${error.message}`);
-            console.log("[Email Service] Falling back to Mock Ethereal Email due to verification failure.");
-            // Proceed to mock creation
-        }
-    } 
-
-    console.log("[Email Service] No valid Gmail in .env or verification failed.");
-    if (process.env.NODE_ENV === 'production') {
-        throw new Error('Email service not configured or invalid credentials. Please set EMAIL_USER and EMAIL_PASS in Render environment variables.');
+        senderEmail = process.env.EMAIL_USER;
+        console.log(`[Email Service] Gmail transporter configured for ${process.env.EMAIL_USER}`);
+        return transporter;
     }
+
+    // No credentials available
+    console.log("[Email Service] EMAIL_USER / EMAIL_PASS not set.");
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Email not configured on server. Please contact admin.');
+    }
+
+    // Dev fallback: Ethereal mock email
     console.log("[Email Service] Falling back to Mock Ethereal Email.");
     const testAccount = await nodemailer.createTestAccount();
     transporter = nodemailer.createTransport({
@@ -87,7 +84,7 @@ async function getTransporter() {
         }
     });
     senderEmail = testAccount.user;
-    
+
     return transporter;
 }
 
@@ -751,19 +748,25 @@ async function sendFeedbackEmailToAdmin(userName, userEmail, type, category, mes
  * Reset Password Email Template
  */
 async function sendResetPasswordEmail(toEmail, token) {
-    const t = await getTransporter();
-
-    // Mandatory configuration logs
-    console.log("EMAIL_USER:", process.env.EMAIL_USER);
-    console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
-
-    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    // Use production frontend URL, not the backend URL
+    const baseUrl = process.env.APP_URL || 'https://swap-pay.vercel.app';
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
+    // Always log the link so it can be found in Render logs as a fallback
+    logCriticalEmailToConsole("Password Reset Link", toEmail, resetLink);
+
+    let t;
+    try {
+        t = await getTransporter();
+    } catch (err) {
+        console.error('[Email Service] Cannot get transporter:', err.message);
+        return { success: false, resetLink, error: err.message };
+    }
+
     const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: `"SwapPay" <${senderEmail}>`,
         to: toEmail,
-        subject: "Reset Your Password",
+        subject: "🔑 Reset Your SwapPay Password",
         html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2>SwapPay Password Reset</h2>
@@ -779,29 +782,12 @@ async function sendResetPasswordEmail(toEmail, token) {
         `
     };
 
-    // Mandatory force test email send as temporary diagnostic
-    console.log("Attempting mandatory force test email send...");
-    try {
-        await t.sendMail({
-            from: process.env.EMAIL_USER,
-            to: toEmail,
-            subject: "Test Email",
-            text: "Test success"
-        });
-        console.log("Force test email sent successfully");
-    } catch (testError) {
-        console.error("Force test email failed:", testError.message);
-    }
-
-    // DEV FALLBACK: Log link to console for debugging
-    logCriticalEmailToConsole("Password Reset Link", toEmail, resetLink);
-
     try {
         await t.sendMail(mailOptions);
-        console.log("Email sent successfully");
+        console.log(`[Email Service] Password reset email sent to ${toEmail}`);
         return { success: true, resetLink };
     } catch (error) {
-        console.error("Email sending failed:", error.message);
+        console.error('[Email Service] Failed to send reset email:', error.message);
         return { success: false, resetLink, error: error.message };
     }
 }
