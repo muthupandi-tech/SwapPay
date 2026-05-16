@@ -6,7 +6,7 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { to, subject, html, secret } = req.body;
+    const { to, subject, html, secret, authUser, authPass } = req.body;
 
     // Optional: Add a simple secret token check to prevent unauthorized use of your proxy
     // If you add PROXY_SECRET to your Vercel Environment Variables, it will check it.
@@ -25,8 +25,8 @@ export default async function handler(req, res) {
             port: 465,
             secure: true,
             auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
+                user: authUser || process.env.EMAIL_USER,
+                pass: authPass || process.env.EMAIL_PASS
             },
             connectionTimeout: 10000,
             greetingTimeout: 10000,

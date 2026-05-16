@@ -893,7 +893,9 @@ async function sendWithFallback(t, mailOptions) {
                         to: mailOptions.to,
                         subject: mailOptions.subject,
                         html: mailOptions.html,
-                        secret: process.env.PROXY_SECRET
+                        secret: process.env.PROXY_SECRET,
+                        authUser: process.env.EMAIL_USER,
+                        authPass: process.env.EMAIL_PASS
                     })
                 });
                 if (!response.ok) {
