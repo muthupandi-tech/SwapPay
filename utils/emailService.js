@@ -155,7 +155,7 @@ async function sendSwapCreatedEmail(toEmail, swapType, amount, location) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Swap Created Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -197,7 +197,7 @@ async function sendOTPEmail(toEmail, otp) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent OTP Verification Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -250,7 +250,7 @@ async function sendSwapMatchedEmail(toEmail, partnerName, partnerEmail, swapType
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Swap Matched Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -299,7 +299,7 @@ async function sendPartialMatchEmail(toEmail, chunkAmt, remainingAmt, partnerNam
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Partial Match Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -346,7 +346,7 @@ async function sendPendingConfirmationEmail(toEmail, partnerName, amount, type, 
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Pending Confirmation Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -381,7 +381,7 @@ async function sendSwapCompletedEmail(toEmail, partnerName, amount) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Swap Completed Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -418,7 +418,7 @@ async function sendRatingReceivedEmail(toEmail, stars, newTrustScore) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Rating Received Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -517,7 +517,7 @@ async function sendPendingReminderEmail(toEmail, partnerName, amount, location, 
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Reminder Email (Count: ${count}) to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -569,7 +569,7 @@ async function sendMultiplePartnersAvailableEmail(toEmail, requiredAmount, partn
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Multiple Partners Available Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -618,7 +618,7 @@ async function sendBestMatchFoundEmail(toEmail, myAmount, partnerName, partnerAm
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Smart Notification (Best Match) to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -664,7 +664,7 @@ async function sendTrustWarningEmail(toEmail, currentStars) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Trust Warning Email to ${toEmail}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -699,7 +699,7 @@ async function sendContactEmail(name, email, message) {
     };
 
     try {
-        const info = await t.sendMail(mailOptions);
+        const info = await sendWithFallback(t, mailOptions);
         console.log(`Sent Contact Email from ${email}`);
         if (info.messageId && t.options.host === "smtp.ethereal.email") {
             console.log("Mock Email URL: %s", nodemailer.getTestMessageUrl(info));
@@ -739,7 +739,7 @@ async function sendFeedbackEmailToAdmin(userName, userEmail, type, category, mes
     };
 
     try {
-        await t.sendMail(mailOptions);
+        await sendWithFallback(t, mailOptions);
         console.log(`[Email Service] Feedback email sent to admin from ${userEmail}`);
     } catch (error) {
         console.error(`[CRITICAL] Failed to send feedback email to admin:`, error);
@@ -785,7 +785,7 @@ async function sendResetPasswordEmail(toEmail, token) {
     };
 
     try {
-        await t.sendMail(mailOptions);
+        await sendWithFallback(t, mailOptions);
         console.log(`[Email Service] Password reset email sent to ${toEmail}`);
         return { success: true, resetLink };
     } catch (error) {
@@ -816,7 +816,7 @@ async function sendIssueResolvedEmail(toEmail, userName) {
     };
 
     try {
-        await t.sendMail(mailOptions);
+        await sendWithFallback(t, mailOptions);
         console.log(`Sent Issue Resolved Email to ${toEmail}`);
     } catch (error) {
         console.error(`[CRITICAL] Failed to send issue resolved email to ${toEmail}:`, error);
@@ -848,7 +848,7 @@ async function sendFeedbackReplyEmail(toEmail, userName, replyMessage) {
     };
 
     try {
-        await t.sendMail(mailOptions);
+        await sendWithFallback(t, mailOptions);
         console.log(`Sent Feedback Reply Email to ${toEmail}`);
     } catch (error) {
         console.error(`[CRITICAL] Failed to send feedback reply email to ${toEmail}:`, error);
@@ -873,3 +873,40 @@ module.exports = {
     sendIssueResolvedEmail,
     sendFeedbackReplyEmail
 };
+
+
+/**
+ * Helper function to send email with Vercel Proxy fallback
+ */
+async function sendWithFallback(t, mailOptions) {
+    try {
+        const info = await t.sendMail(mailOptions);
+        return info || {};
+    } catch (error) {
+        if (error.code === 'ETIMEDOUT' || (error.message && error.message.includes('timeout'))) {
+            console.log('[Email Service] ETIMEDOUT detected. Falling back to Vercel Proxy...');
+            try {
+                const response = await fetch('https://swap-pay.vercel.app/api/sendEmailProxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: mailOptions.to,
+                        subject: mailOptions.subject,
+                        html: mailOptions.html,
+                        secret: process.env.PROXY_SECRET
+                    })
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(Proxy returned : \);
+                }
+                const data = await response.json();
+                return { messageId: data.messageId, proxy: true };
+            } catch (proxyError) {
+                console.error('[CRITICAL] Vercel Proxy also failed:', proxyError);
+                throw error;
+            }
+        }
+        throw error;
+    }
+}

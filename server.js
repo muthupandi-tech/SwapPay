@@ -214,8 +214,14 @@ app.use('/api/admin', requireAdminAPI, adminRoutes);
     connectionLimit: 10,
     queueLimit: 0
 });*/
+let dbUrl = process.env.DATABASE_URL;
+if (!dbUrl || dbUrl === 'base' || dbUrl.includes('@base')) {
+    console.warn('[DB Config] Invalid or missing DATABASE_URL detected. Falling back to default Neon DB.');
+    dbUrl = 'postgresql://neondb_owner:npg_wX7MmeLB0FTU@ep-wandering-salad-an98u8xz-pooler.c-6.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require';
+}
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: dbUrl,
     ssl: {
         rejectUnauthorized: false
     },
