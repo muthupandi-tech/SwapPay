@@ -51,14 +51,16 @@ async function getTransporter() {
 
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_USER !== 'your_email@gmail.com') {
         transporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
             },
-            connectionTimeout: 10000, // 10s connection timeout
-            greetingTimeout: 10000,
-            socketTimeout: 15000
+            connectionTimeout: 30000, // 30s connection timeout
+            greetingTimeout: 30000,
+            socketTimeout: 30000
         });
         senderEmail = process.env.EMAIL_USER;
         console.log(`[Email Service] Gmail transporter configured for ${process.env.EMAIL_USER}`);
