@@ -759,15 +759,30 @@ ORDER BY s.created_at DESC;
         const { rows: rows2 } = await pool.query(query2, [currentUserId, currentUserId, currentUserId]);
 
         const swapIdsInMatches = new Set();
+        const validRows1 = [];
+
         rows1.forEach(r => {
+            // If this is a child swap (has matched_parent_swap_id)
+            if (r.matched_parent_swap_id) {
+                // If the current user is the original requester (User B), 
+                // they should see their ORIGINAL swap, not the child swap!
+                if (Number(r.requester_id) === Number(currentUserId)) {
+                    // Skip this child swap for User B. 
+                    // User B will get their original swap from query2!
+                    return; 
+                }
+            }
+            
+            validRows1.push(r);
             if (r.swap_id) swapIdsInMatches.add(String(r.swap_id));
             if (r.parent_swap_id) swapIdsInMatches.add(String(r.parent_swap_id));
-            if (r.matched_parent_swap_id) swapIdsInMatches.add(String(r.matched_parent_swap_id));
+            // We do NOT add matched_parent_swap_id to swapIdsInMatches,
+            // so query2 can successfully return the original swap for User B.
         });
 
         const filteredRows2 = rows2.filter(r => !swapIdsInMatches.has(String(r.swap_id)));
 
-        const matches = [...rows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
+        const matches = [...validRows1, ...filteredRows2].sort((a, b) => new Date(b.matched_time) - new Date(a.matched_time));
         const matchesWithContext = matches.map(m => {
             const isCreator = Number(m.requester_id) === Number(currentUserId);
             return {
