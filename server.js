@@ -165,8 +165,8 @@ app.use(session({
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
-        secure: true, // MUST be true for sameSite: 'none'
-        sameSite: 'none', // Required for cross-origin requests
+        secure: process.env.NODE_ENV === 'production', 
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
         maxAge: 1000 * 60 * 60 * 24 // 1 day session
     }
 }));
@@ -215,14 +215,13 @@ app.use('/api/admin', requireAdminAPI, adminRoutes);
     queueLimit: 0
 });*/
 const pool = new Pool({
-    host: "ep-wandering-salad-an98u8xz-pooler.c-6.us-east-1.aws.neon.tech",
-    user: "neondb_owner",
-    password: "npg_wX7MmeLB0FTU",
-    database: "neondb",
-    port: 5432,
+    connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    max: 10,                      // max connections in pool
+    idleTimeoutMillis: 60000,     // close idle connections after 60s
+    connectionTimeoutMillis: 30000 // give neon 30s to wake up to prevent ETIMEDOUT during login
 });
 
 module.exports = pool;
