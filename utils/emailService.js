@@ -898,7 +898,7 @@ async function sendWithFallback(t, mailOptions) {
                 });
                 if (!response.ok) {
                     const errText = await response.text();
-                    throw new Error(Proxy returned : \);
+                    throw new Error(`Proxy returned ${response.status}: ${errText}`);
                 }
                 const data = await response.json();
                 return { messageId: data.messageId, proxy: true };
