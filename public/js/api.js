@@ -72,3 +72,17 @@ window.initSocket = function() {
         return null;
     }
 };
+
+/**
+ * Global logout handler
+ */
+window.handleLogout = async function(e) {
+    if (e) e.preventDefault();
+    try {
+        await window.apiFetch('/api/auth/logout', { method: 'GET' });
+        window.location.href = '/';
+    } catch (err) {
+        console.error('Logout failed:', err);
+        window.location.href = '/';
+    }
+};
