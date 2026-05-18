@@ -1130,6 +1130,17 @@ exports.confirmPartnerSelection = async (req, res) => {
                 userId, mySwap.type, actualChunk, actualChunk, 0, mySwap.location, 'matched', candidateSwap.user_id, swapId, candidateId
             ]);
 
+            // Fix: Insert into matches table to ensure the partner sees this in their "Matched" tab
+            await pool.query(`
+                INSERT INTO matches (swap_id, requester_id, accepter_id, status, created_at)
+                VALUES ($1, $2, $3, $4, NOW())
+            `, [
+                childResultRows[0].id,
+                candidateSwap.user_id,
+                userId,
+                'matched'
+            ]);
+
             matchedChunks.push({
                 partnerId: candidateSwap.user_id,
                 chunkAmount: actualChunk,
