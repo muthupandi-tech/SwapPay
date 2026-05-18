@@ -883,8 +883,8 @@ async function sendWithFallback(t, mailOptions) {
         const info = await t.sendMail(mailOptions);
         return info || {};
     } catch (error) {
-        if (error.code === 'ETIMEDOUT' || (error.message && error.message.includes('timeout'))) {
-            console.log('[Email Service] ETIMEDOUT detected. Falling back to Vercel Proxy...');
+        if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKET' || error.code === 'ENETUNREACH' || error.code === 'ECONNREFUSED' || (error.message && (error.message.includes('timeout') || error.message.includes('ENETUNREACH') || error.message.includes('ESOCKET')))) {
+            console.log('[Email Service] Network issue detected (timeout or unreachable). Falling back to Vercel Proxy...');
             try {
                 const response = await fetch('https://swap-pay.vercel.app/api/sendEmailProxy', {
                     method: 'POST',
