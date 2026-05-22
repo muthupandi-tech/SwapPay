@@ -1714,9 +1714,15 @@
             const showEdited = swap.is_edited && (swap.status === 'open' || swap.status === 'active');
             const editedLabel = showEdited ? '<span style="font-size: 0.75rem; font-weight: 500; color: #d97706; margin-left: 0.5rem; padding: 2px 8px; background: rgba(245, 158, 11, 0.1); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2); cursor: help;" title="This swap was updated recently">🔄 Updated</span>' : '';
 
-            let timeStrHTML = `<span>Posted:</span> <strong>${formatRelativeDate(swap.created_at)}</strong>`;
-            if (swap.status === 'completed' || currentTab === 'completed') {
-                timeStrHTML = `<span>Completed:</span> <strong>${formatISTDate(swap.completed_at || swap.created_at)}</strong>`;
+            let timeStrHTML = '';
+            if (isMyContext) {
+                if (swap.status === 'completed' || currentTab === 'completed') {
+                    timeStrHTML = `<span>Completed:</span> <strong>${formatISTDate(swap.completed_at || swap.created_at)}</strong>`;
+                } else {
+                    timeStrHTML = `<span>Posted:</span> <strong>${formatRelativeDate(swap.created_at)}</strong>`;
+                }
+            } else {
+                timeStrHTML = `<span>Posted:</span> <strong>${formatISTDate(swap.created_at)}</strong>`;
             }
 
             // Use remaining_amount only for active/open swaps. For matched/completed, show the match amount.
@@ -1772,8 +1778,6 @@
         function getCorrectedDate(dateStr) {
             const d = new Date(dateStr);
             if (isNaN(d.getTime())) return new Date();
-            // Fix timezone shift from backend (UTC parsed as local)
-            d.setMinutes(d.getMinutes() + 330);
             return d;
         }
 
@@ -1788,19 +1792,15 @@
             const date = getCorrectedDate(dateStr);
             const now = new Date();
             const diffMs = now - date;
+            
             if (diffMs < 0) return 'Just now';
+            
             const diffMins = Math.floor(diffMs / 60000);
-            
             if (diffMins < 1) return 'Just now';
-            if (diffMins < 60) return `${diffMins} mins ago`;
+            if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
             
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            
-            if (targetDate.getTime() === today.getTime()) return 'Today';
-            if (targetDate.getTime() === yesterday.getTime()) return 'Yesterday';
+            const diffHours = Math.floor(diffMs / 3600000);
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
             
             return formatISTDate(dateStr);
         }
@@ -2183,8 +2183,11 @@
                             Needs ${swap.type === "need_upi" ? "UPI" : "Cash"}
                         </span>
                       </div>
-                      <div class="swap-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">
+                      <div class="swap-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 1rem;">
                         <span>Location:</span> <strong style="color: var(--text-primary);">${swap.location}</strong>
+                      </div>
+                      <div class="swap-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">
+                        <span>Posted:</span> <strong style="color: var(--text-primary);">${formatISTDate(swap.created_at)}</strong>
                       </div>
 
                       <button class="accept-btn btn-accept-swap" data-id="${swap.id}" data-amount="${amountToDisplay}" style="width: 100%;">
