@@ -213,6 +213,11 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
+            
             const oldPassword = document.getElementById('oldPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;

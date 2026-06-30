@@ -353,6 +353,10 @@
 
         // Form Submissions
         async function submitForm(type, formData) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             try {
                 formData.type = type;
                 const response = await apiFetch('/api/support/feedback', {

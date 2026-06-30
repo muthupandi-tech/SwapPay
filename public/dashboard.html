@@ -1365,7 +1365,13 @@
         const ratingForm = document.getElementById('ratingForm');
         const rateSwapIdInput = document.getElementById('rateSwapId');
 
+
+
         function openModal(type) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             swapTypeInput.value = type;
 
             if (type === 'need_cash') {
@@ -1383,6 +1389,10 @@
         }
 
         function openRatingModal(swapId) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             rateSwapIdInput.value = swapId;
             ratingModal.classList.add('active');
         }
@@ -2233,6 +2243,10 @@
 
         document.addEventListener("click", async (e) => {
             if (e.target.classList.contains("accept-btn")) {
+                if (window.isGuestUser()) {
+                    window.showGuestIntimationModal();
+                    return;
+                }
                 const swapId = e.target.dataset.id;
                 const matchAmount = parseFloat(e.target.dataset.amount || '0');
                 const card = e.target.closest('.swap-card');
@@ -2342,6 +2356,10 @@
         let activeCandidatePartners = [];
 
         window.openPartnerSelection = async function (swapId, requestedAmount, swapType) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             activeSelectionSwapId = swapId;
             activeSelectionRequestedAmount = parseFloat(requestedAmount);
 
@@ -2494,6 +2512,10 @@
 
         // Complete Swap
         window.completeSwap = async function (swapId) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             if (!confirm('Are you sure you want to mark this exchange as completed?')) return;
 
             try {
@@ -2524,6 +2546,10 @@
 
         // Delete Swap
         window.editSwap = function (id, amount, location, type) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             document.getElementById('editSwapId').value = id;
             document.getElementById('editSwapAmount').value = amount;
             document.getElementById('editSwapLocation').value = location;
@@ -2570,6 +2596,10 @@
         };
 
         window.deleteSwap = async function (swapId) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             if (!confirm('Are you sure you want to delete this swap request? This action cannot be undone.')) return;
 
             try {
@@ -2841,6 +2871,10 @@
         const chatMessagesContainer = document.getElementById('chatMessagesContainer');
 
         async function openChatModal(swapId, partnerName) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             activeChatSwapId = swapId;
             document.getElementById('chatPartnerName').innerHTML = `Chat with <span>${partnerName}</span>`;
             chatMessagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-secondary); width: 100%;">Loading messages...</div>';

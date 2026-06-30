@@ -501,6 +501,10 @@
         // Modal Logic
         const modal = document.getElementById('editModal');
         function openEditModal() {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             modal.classList.add('active');
         }
         function closeEditModal() {

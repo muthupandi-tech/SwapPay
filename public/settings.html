@@ -336,6 +336,13 @@
         }
 
         async function saveRadius(val) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                // Revert slider value
+                document.getElementById('searchRadius').value = settings.search_radius || 300;
+                updateRadiusDisplay(settings.search_radius || 300);
+                return;
+            }
             settings.search_radius = parseInt(val);
             try {
                 const res = await apiFetch('/api/user/settings', {
@@ -355,6 +362,10 @@
         }
 
         async function toggleSetting(key) {
+            if (window.isGuestUser()) {
+                window.showGuestIntimationModal();
+                return;
+            }
             settings[key] = !settings[key];
             updateUI(); // optimistic
 

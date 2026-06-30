@@ -7,6 +7,9 @@ const requireAuthAPI = (req, res, next) => {
     console.log('--- requireAuthAPI middleware hit for path:', req.path);
     if (req.session && req.session.userId) {
         console.log('User is authenticated:', req.session.userId);
+        if (req.session.role === 'guest' && req.method !== 'GET') {
+            return res.status(403).json({ error: 'Guest mode is read-only. Please log in or sign up to perform this action.', isGuestError: true });
+        }
         return next();
     } else {
         console.log('User is NOT authenticated.');

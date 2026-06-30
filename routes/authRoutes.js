@@ -39,6 +39,7 @@ router.post('/login',
 
 router.get('/logout', authController.logoutUser);
 router.get('/me', authController.getCurrentUser);
+router.post('/guest-login', authController.guestLogin);
 
 router.post('/verify-otp', 
     [

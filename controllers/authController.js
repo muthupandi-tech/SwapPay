@@ -339,3 +339,45 @@ exports.resetPassword = async (req, res) => {
         return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again later.' });
     }
 };
+
+exports.guestLogin = async (req, res) => {
+    try {
+        const guestEmail = 'guest@swappay.com';
+        // Check if guest user exists
+        let { rows } = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1', [guestEmail]);
+        let guestUser;
+        if (rows.length === 0) {
+            // Create guest user
+            const bcrypt = require('bcrypt');
+            const guestPasswordHash = await bcrypt.hash('guest_dummy_pwd_123_!!', 10);
+            const insertResult = await pool.query(
+                `INSERT INTO users (name, phone, email, college, password, role, is_verified) 
+                 VALUES ('Guest Explorer', '0000000000', $1, 'Guest HQ', $2, 'guest', TRUE) 
+                 RETURNING id, name, email, role`,
+                [guestEmail, guestPasswordHash]
+            );
+            guestUser = insertResult.rows[0];
+            console.log('Guest user created.');
+        } else {
+            guestUser = rows[0];
+            if (guestUser.role !== 'guest') {
+                await pool.query("UPDATE users SET role = 'guest' WHERE id = $1", [guestUser.id]);
+                guestUser.role = 'guest';
+            }
+        }
+
+        // Create session
+        req.session.userId = guestUser.id;
+        req.session.userName = guestUser.name;
+        req.session.role = 'guest';
+
+        return res.json({
+            success: true,
+            message: 'Guest login successful!',
+            redirect: '/dashboard'
+        });
+    } catch (error) {
+        console.error('Guest Login Error:', error);
+        return res.status(500).json({ success: false, message: 'An error occurred during guest login.' });
+    }
+};

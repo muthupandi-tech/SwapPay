@@ -126,6 +126,7 @@
                     </div>
                 </div>
                 <button type="submit" class="btn-submit" id="submitBtn">Log In</button>
+                <button type="button" class="btn-submit" id="guestBtn" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--text-primary); margin-top: 0.8rem;">Explore as Guest</button>
             </form>
 
             <div class="auth-links">
@@ -139,6 +140,7 @@
     <script>
         const loginForm = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
+        const guestBtn = document.getElementById('guestBtn');
         const alertBox = document.getElementById('alert');
 
         loginForm.addEventListener('submit', async (e) => {
@@ -170,6 +172,7 @@
                 }
 
                 if (response.ok && data.success) {
+                    localStorage.removeItem('guestMode'); // Clear guest mode
                     submitBtn.innerText = 'Success! Redirecting...';
                     window.location.href = data.redirect || '/dashboard';
                 } else {
@@ -190,6 +193,36 @@
                 submitBtn.disabled = false;
             }
         });
+
+        if (guestBtn) {
+            guestBtn.addEventListener('click', async () => {
+                guestBtn.innerText = 'Initializing Guest Session...';
+                guestBtn.disabled = true;
+                alertBox.style.display = 'none';
+                try {
+                    const response = await apiFetch('/api/auth/guest-login', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.success) {
+                        localStorage.setItem('guestMode', 'true');
+                        guestBtn.innerText = 'Redirecting...';
+                        window.location.href = data.redirect || '/dashboard';
+                    } else {
+                        alertBox.innerText = data.message || 'Failed to enter guest mode.';
+                        alertBox.style.display = 'block';
+                        guestBtn.innerText = 'Explore as Guest';
+                        guestBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Guest login error:', error);
+                    alertBox.innerText = 'Unable to connect. Please try again.';
+                    alertBox.style.display = 'block';
+                    guestBtn.innerText = 'Explore as Guest';
+                    guestBtn.disabled = false;
+                }
+            });
+        }
     </script>
 </body>
 
